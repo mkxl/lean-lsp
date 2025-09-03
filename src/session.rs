@@ -8,7 +8,6 @@ use crate::{process::Process, utils::Utils};
 #[allow(dead_code)]
 pub struct Session {
   key: Ulid,
-  lean_filepath: PathBuf,
   process: Process,
   project_dirpath: PathBuf,
 }
@@ -16,44 +15,37 @@ pub struct Session {
 impl Session {
   pub const LEAN_SERVER_LOG_DIRPATH_ENV_NAME: &'static str = "LEAN_SERVER_LOG_DIR";
 
-  pub fn new(
-    lean_filepath: PathBuf,
-    project_dirpath: Option<PathBuf>,
-    lean_server_log_dirpath: Option<&Path>,
-  ) -> Result<Self, Error> {
+  const MANIFEST_FILE_NAMES: &[&'static str] = &["lakefile.lean", "lakefile.toml"];
+
+  pub fn new(lean_path: &Path, lean_server_log_dirpath: Option<&Path>) -> Result<Self, Error> {
     let key = Ulid::new();
-    let project_dirpath = Self::project_dirpath(&lean_filepath, project_dirpath)?;
+    let project_dirpath = Self::project_dirpath(lean_path)?;
     let process = Self::process(&project_dirpath, lean_server_log_dirpath)?;
     let session = Self {
       key,
-      lean_filepath,
       process,
       project_dirpath,
     };
 
+    tracing::info!(message = "new session", project_dirpath = %session.project_dirpath.display());
+
     session.ok()
   }
 
-  fn get_project_dirpath(lean_filepath: &Path) -> Result<PathBuf, Error> {
-    for ancestor_path in lean_filepath.ancestors() {
-      let mut lakefile_filepath = ancestor_path.with_file_name("lakefile.lean");
+  fn project_dirpath(lean_path: &Path) -> Result<PathBuf, Error> {
+    for ancestor_path in lean_path.ancestors() {
+      for manifest_file_name in Self::MANIFEST_FILE_NAMES {
+        let mut manifest_filepath = ancestor_path.with_file_name(manifest_file_name);
 
-      if lakefile_filepath.is_file() {
-        lakefile_filepath.pop();
+        if manifest_filepath.is_file() {
+          manifest_filepath.pop();
 
-        return lakefile_filepath.ok();
+          return manifest_filepath.ok();
+        }
       }
     }
 
     anyhow::bail!("unable to get project dirpath: no manifest file found in ancestor dirpaths");
-  }
-
-  fn project_dirpath(lean_filepath: &Path, project_dirpath: Option<PathBuf>) -> Result<PathBuf, Error> {
-    if let Some(project_dirpath) = project_dirpath {
-      project_dirpath.ok()
-    } else {
-      Self::get_project_dirpath(lean_filepath)
-    }
   }
 
   fn process(project_dirpath: &Path, lean_server_log_dirpath: Option<&Path>) -> Result<Process, Error> {
