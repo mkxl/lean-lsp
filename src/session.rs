@@ -3,27 +3,25 @@ use std::path::{Path, PathBuf};
 use anyhow::Error;
 use ulid::Ulid;
 
-use crate::{process::Process, utils::Utils};
+use crate::{lean_server::LeanServer, utils::Utils};
 
 #[allow(dead_code)]
 pub struct Session {
   key: Ulid,
-  process: Process,
+  lean_server: LeanServer,
   project_dirpath: PathBuf,
 }
 
 impl Session {
-  pub const LEAN_SERVER_LOG_DIRPATH_ENV_NAME: &'static str = "LEAN_SERVER_LOG_DIR";
-
   const MANIFEST_FILE_NAMES: &[&'static str] = &["lakefile.lean", "lakefile.toml"];
 
   pub fn new(lean_path: &Path, lean_server_log_dirpath: Option<&Path>) -> Result<Self, Error> {
     let key = Ulid::new();
     let project_dirpath = Self::project_dirpath(lean_path)?;
-    let process = Self::process(&project_dirpath, lean_server_log_dirpath)?;
+    let lean_server = LeanServer::new(&project_dirpath, lean_server_log_dirpath)?;
     let session = Self {
       key,
-      process,
+      lean_server,
       project_dirpath,
     };
 
@@ -48,19 +46,7 @@ impl Session {
     anyhow::bail!("unable to get project dirpath: no manifest file found in ancestor dirpaths");
   }
 
-  fn process(project_dirpath: &Path, lean_server_log_dirpath: Option<&Path>) -> Result<Process, Error> {
-    let lean_server_log_dirpath = lean_server_log_dirpath.map(Path::as_os_str).unwrap_or_default();
-    let process = Process::new(
-      "lake",
-      ["serve"],
-      [(Self::LEAN_SERVER_LOG_DIRPATH_ENV_NAME, lean_server_log_dirpath)],
-      project_dirpath.some(),
-    )?;
-
-    process.ok()
-  }
-
   pub async fn run(&mut self) -> Result<(), Error> {
-    self.process.run().await
+    self.lean_server.run().await
   }
 }

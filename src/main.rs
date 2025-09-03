@@ -1,4 +1,5 @@
 mod cli_args;
+mod lean_server;
 mod process;
 mod session;
 mod utils;

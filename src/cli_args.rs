@@ -7,7 +7,7 @@ use tracing_subscriber::{
   Layer, filter::LevelFilter, fmt::format::FmtSpan, layer::SubscriberExt, util::SubscriberInitExt,
 };
 
-use crate::{session::Session, utils::Utils};
+use crate::{lean_server::LeanServer, session::Session, utils::Utils};
 
 #[derive(Args)]
 struct Serve {
@@ -32,7 +32,7 @@ struct Run {
 }
 
 impl Run {
-  const LEAN_SERVER_LOG_DIRPATH_ENV_NAME: &'static str = Session::LEAN_SERVER_LOG_DIRPATH_ENV_NAME;
+  const LEAN_SERVER_LOG_DIRPATH_ENV_NAME: &'static str = LeanServer::LOG_DIRPATH_ENV_NAME;
 
   async fn run(self) -> Result<(), Error> {
     Session::new(&self.lean_path, self.lean_server_log_dirpath.as_deref())?
