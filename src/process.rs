@@ -20,8 +20,8 @@ pub struct Process {
 impl Process {
   pub fn new<S1: AsRef<OsStr>, S2: AsRef<OsStr>, S3: AsRef<OsStr>, S4: AsRef<OsStr>>(
     cmd: S1,
-    args: &[S2],
-    env: &[(S3, S4)],
+    args: impl IntoIterator<Item = S2>,
+    env: impl IntoIterator<Item = (S3, S4)>,
     current_dirpath: Option<&Path>,
   ) -> Result<Self, Error> {
     let mut command = Command::new(cmd);

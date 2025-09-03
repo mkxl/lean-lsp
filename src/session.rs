@@ -55,12 +55,13 @@ impl Session {
   }
 
   fn process(project_dirpath: &Path, lean_server_log_dirpath: Option<&Path>) -> Result<Process, Error> {
-    let env: &[(&str, &Path)] = if let Some(lean_server_log_dirpath) = lean_server_log_dirpath {
-      &[("LEAN_SERVER_LOG_DIR", lean_server_log_dirpath)]
-    } else {
-      &[]
-    };
-    let process = Process::new("lake", &["serve"], env, project_dirpath.some())?;
+    let lean_server_log_dirpath = lean_server_log_dirpath.map(Path::as_os_str).unwrap_or_default();
+    let process = Process::new(
+      "lake",
+      ["serve"],
+      [("LEAN_SERVER_LOG_DIR", lean_server_log_dirpath)],
+      project_dirpath.some(),
+    )?;
 
     process.ok()
   }
