@@ -1,6 +1,6 @@
 use std::{
   ffi::OsStr,
-  io::{PipeReader, PipeWriter},
+  io::{PipeReader, PipeWriter, Write},
   path::Path,
 };
 
@@ -55,6 +55,14 @@ impl Process {
     };
 
     process.ok()
+  }
+
+  #[allow(dead_code)]
+  pub fn write(&mut self, bytes: &[u8]) -> Result<(), Error> {
+    self.stdin_writer.write_all(bytes)?;
+    self.stdin_writer.flush()?;
+
+    ().ok()
   }
 
   pub async fn run(&mut self) -> Result<(), Error> {
