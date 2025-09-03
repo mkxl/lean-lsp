@@ -1,14 +1,13 @@
-use crate::session::Session;
-use crate::utils::Utils;
+use std::{io::StdoutLock, net::IpAddr, path::PathBuf};
+
 use anyhow::Error;
 use clap::{Args, Parser, Subcommand};
 use console_subscriber::{ConsoleLayer, Server as ConsoleServer};
-use std::io::StdoutLock;
-use std::net::IpAddr;
-use std::path::PathBuf;
 use tracing_subscriber::{
   Layer, filter::LevelFilter, fmt::format::FmtSpan, layer::SubscriberExt, util::SubscriberInitExt,
 };
+
+use crate::{session::Session, utils::Utils};
 
 #[derive(Args)]
 struct Serve {

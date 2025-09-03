@@ -1,9 +1,13 @@
-use crate::utils::Utils;
+use std::{
+  ffi::OsStr,
+  io::{PipeReader, PipeWriter},
+  path::Path,
+};
+
 use anyhow::Error;
-use std::ffi::OsStr;
-use std::io::{PipeReader, PipeWriter};
-use std::path::Path;
 use tokio::process::{Child, Command};
+
+use crate::utils::Utils;
 
 #[allow(dead_code)]
 pub struct Process {

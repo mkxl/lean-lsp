@@ -1,8 +1,9 @@
-use crate::process::Process;
-use crate::utils::Utils;
-use anyhow::Error;
 use std::path::{Path, PathBuf};
+
+use anyhow::Error;
 use ulid::Ulid;
+
+use crate::{process::Process, utils::Utils};
 
 #[allow(dead_code)]
 pub struct Session {
