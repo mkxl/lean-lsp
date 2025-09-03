@@ -14,6 +14,8 @@ pub struct Session {
 }
 
 impl Session {
+  pub const LEAN_SERVER_LOG_DIRPATH_ENV_NAME: &'static str = "LEAN_SERVER_LOG_DIR";
+
   pub fn new(
     lean_filepath: PathBuf,
     project_dirpath: Option<PathBuf>,
@@ -59,7 +61,7 @@ impl Session {
     let process = Process::new(
       "lake",
       ["serve"],
-      [("LEAN_SERVER_LOG_DIR", lean_server_log_dirpath)],
+      [(Self::LEAN_SERVER_LOG_DIRPATH_ENV_NAME, lean_server_log_dirpath)],
       project_dirpath.some(),
     )?;
 
