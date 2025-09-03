@@ -25,7 +25,7 @@ impl Serve {
 
 #[derive(Args)]
 struct Run {
-  lean_filepath: PathBuf,
+  lean_path: PathBuf,
 
   #[arg(long = "log-dir", env = Self::LEAN_SERVER_LOG_DIRPATH_ENV_NAME)]
   lean_server_log_dirpath: Option<PathBuf>,
@@ -35,7 +35,7 @@ impl Run {
   const LEAN_SERVER_LOG_DIRPATH_ENV_NAME: &'static str = Session::LEAN_SERVER_LOG_DIRPATH_ENV_NAME;
 
   async fn run(self) -> Result<(), Error> {
-    Session::new(self.lean_filepath, None, self.lean_server_log_dirpath.as_deref())?
+    Session::new(&self.lean_path, self.lean_server_log_dirpath.as_deref())?
       .run()
       .await
   }
