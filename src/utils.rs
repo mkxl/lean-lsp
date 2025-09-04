@@ -20,6 +20,13 @@ pub trait Utils {
     Ok(self)
   }
 
+  fn pair<T>(self, rhs: T) -> (Self, T)
+  where
+    Self: Sized,
+  {
+    (self, rhs)
+  }
+
   async fn read_string(&mut self) -> Result<String, Error>
   where
     Self: AsyncReadExt + Unpin,

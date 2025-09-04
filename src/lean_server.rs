@@ -27,11 +27,7 @@ impl LeanServer {
   }
 
   fn process(project_dirpath: &Path, log_dirpath: Option<&Path>) -> Result<Process, Error> {
-    let env: &[_] = if let Some(log_dirpath) = log_dirpath {
-      &[(Self::LOG_DIRPATH_ENV_NAME, log_dirpath)]
-    } else {
-      &[]
-    };
+    let env = log_dirpath.map(|log_dirpath| Self::LOG_DIRPATH_ENV_NAME.pair(log_dirpath));
     let process = Process::new("lake", ["serve"], env, project_dirpath.some())?;
 
     process.ok()
