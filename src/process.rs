@@ -1,36 +1,46 @@
 use std::{
+  borrow::Borrow,
   ffi::OsStr,
-  io::{PipeReader, PipeWriter, Write},
   path::Path,
+  process::{ExitStatus, Stdio},
 };
 
 use anyhow::Error;
-use tokio::process::{Child, Command};
+use tokio::process::{Child, ChildStderr, ChildStdin, ChildStdout, Command};
 
 use crate::utils::Utils;
 
-#[allow(dead_code)]
 pub struct Process {
   child: Child,
-  stdin_writer: PipeWriter,
-  stdout_reader: PipeReader,
-  stderr_reader: PipeReader,
+  stdin: ChildStdin,
+  stdout: ChildStdout,
+  stderr: ChildStderr,
 }
 
 impl Process {
-  pub fn new<S1: AsRef<OsStr>, S2: AsRef<OsStr>, S3: AsRef<OsStr>, S4: AsRef<OsStr>>(
-    cmd: S1,
-    args: impl IntoIterator<Item = S2>,
-    env: impl IntoIterator<Item = (S3, S4)>,
+  pub fn new<Cmd: AsRef<OsStr>, Args: IntoIterator, Env: IntoIterator, K: AsRef<OsStr>, V: AsRef<OsStr>>(
+    cmd: Cmd,
+    args: Args,
+    env: Env,
     current_dirpath: Option<&Path>,
-  ) -> Result<Self, Error> {
+  ) -> Result<Self, Error>
+  where
+    Args::Item: AsRef<OsStr>,
+    Env::Item: Borrow<(K, V)>,
+  {
     let mut command = Command::new(cmd);
+
+    command.stdin(Stdio::piped());
+    command.stdout(Stdio::piped());
+    command.stderr(Stdio::piped());
 
     for arg in args {
       command.arg(arg);
     }
 
-    for (env_var_name, env_var_val) in env {
+    for env_entry in env {
+      let (env_var_name, env_var_val) = env_entry.borrow();
+
       command.env(env_var_name, env_var_val);
     }
 
@@ -38,34 +48,40 @@ impl Process {
       command.current_dir(current_dirpath);
     }
 
-    let (stdin_reader, stdin_writer) = std::io::pipe()?;
-    let (stdout_reader, stdout_writer) = std::io::pipe()?;
-    let (stderr_reader, stderr_writer) = std::io::pipe()?;
-
-    command.stdin(stdin_reader);
-    command.stdout(stdout_writer);
-    command.stderr(stderr_writer);
-
-    let child = command.spawn()?;
+    let mut child = command.spawn()?;
+    let stdin = Self::take_stdio(&mut child.stdin)?;
+    let stdout = Self::take_stdio(&mut child.stdout)?;
+    let stderr = Self::take_stdio(&mut child.stderr)?;
     let process = Self {
       child,
-      stdin_writer,
-      stdout_reader,
-      stderr_reader,
+      stdin,
+      stdout,
+      stderr,
     };
 
     process.ok()
   }
 
-  #[allow(dead_code)]
-  pub fn write(&mut self, bytes: &[u8]) -> Result<(), Error> {
-    self.stdin_writer.write_all(bytes)?;
-    self.stdin_writer.flush()?;
-
-    ().ok()
+  fn take_stdio<T>(stdio: &mut Option<T>) -> Result<T, Error> {
+    match stdio.take() {
+      Some(stdio) => stdio.ok(),
+      None => anyhow::bail!("unable to set up stdio for process"),
+    }
   }
 
-  pub async fn run(&mut self) -> Result<(), Error> {
-    self.child.wait().await?.unit().ok()
+  pub fn stdin_mut(&mut self) -> &mut ChildStdin {
+    &mut self.stdin
+  }
+
+  pub fn stdout_mut(&mut self) -> &mut ChildStdout {
+    &mut self.stdout
+  }
+
+  pub fn stderr_mut(&mut self) -> &mut ChildStderr {
+    &mut self.stderr
+  }
+
+  pub async fn run(&mut self) -> Result<ExitStatus, Error> {
+    self.child.wait().await?.ok()
   }
 }
