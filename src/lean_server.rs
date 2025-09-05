@@ -1,6 +1,9 @@
-use std::path::Path;
+use std::{
+  collections::HashMap,
+  path::{Path, PathBuf},
+};
 
-use anyhow::Error;
+use anyhow::{Context, Error};
 use bytes::{Buf, BytesMut};
 use serde::Serialize;
 use serde_json::Value as Json;
@@ -9,19 +12,26 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use crate::{process::Process, utils::Utils};
 
 pub struct LeanServer {
+  project_absolute_dirpath: PathBuf,
   process: Process,
   stdout_buf: BytesMut,
 }
 
 impl LeanServer {
   pub const LOG_DIRPATH_ENV_NAME: &'static str = "LEAN_SERVER_LOG_DIR";
+  const INITIALIZE_JSON: &'static [u8] = include_bytes!("./initialize.json");
 
   const SEPARATOR: &'static [u8] = b"\r\n\r\n";
 
   pub fn new(project_dirpath: &Path, log_dirpath: Option<&Path>) -> Result<Self, Error> {
+    let project_absolute_dirpath = std::path::absolute(project_dirpath)?;
     let process = Self::process(project_dirpath, log_dirpath)?;
     let stdout_buf = BytesMut::new();
-    let lean_server = Self { process, stdout_buf };
+    let lean_server = Self {
+      project_absolute_dirpath,
+      process,
+      stdout_buf,
+    };
 
     lean_server.ok()
   }
@@ -45,7 +55,7 @@ impl LeanServer {
         let content_length = self.stdout_buf[space_end_idx..separator_begin_idx]
           .as_utf8()?
           .parse::<usize>()?;
-        let content_end_idx = separator_begin_idx + content_length;
+        let content_end_idx = separator_end_idx + content_length;
 
         break (separator_end_idx, content_end_idx);
       }
@@ -60,6 +70,8 @@ impl LeanServer {
 
     let content_byte_str = &self.stdout_buf[content_begin_idx..content_end_idx];
     let message = serde_json::from_slice::<Json>(content_byte_str)?;
+
+    tracing::info!(message = "received message", %message);
 
     // NOTE: pop bytes from beginning of buffer
     self.stdout_buf.advance(content_end_idx);
@@ -85,7 +97,26 @@ impl LeanServer {
   }
 
   pub async fn run(&mut self) -> Result<(), Error> {
-    let initialize_request = serde_json::json!({});
+    let mut initialize_request: HashMap<&'static str, Json> = serde_json::from_slice(Self::INITIALIZE_JSON)?;
+
+    let root_str = self.project_absolute_dirpath.to_str().context("path is not utf8")?;
+    let root_uri = format!("file://{root_str}");
+    let project_name = self
+      .project_absolute_dirpath
+      .file_name()
+      .context("path has no basename")?;
+
+    initialize_request.insert("rootPath", root_str.into());
+    initialize_request.insert("rootUri", root_uri.clone().into());
+    initialize_request.insert(
+      "workspaceFolders",
+      serde_json::json!([
+        {
+          "uri": root_uri,
+          "name": project_name,
+        }
+      ]),
+    );
 
     self.send(initialize_request).await?;
 

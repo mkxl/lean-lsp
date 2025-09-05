@@ -25,6 +25,7 @@ impl Serve {
 
 #[derive(Args)]
 struct Run {
+  #[arg(default_value = Self::DEFAULT_LEAN_PATH)]
   lean_path: PathBuf,
 
   #[arg(long = "log-dir", env = Self::LEAN_SERVER_LOG_DIRPATH_ENV_NAME)]
@@ -32,6 +33,7 @@ struct Run {
 }
 
 impl Run {
+  const DEFAULT_LEAN_PATH: &'static str = ".";
   const LEAN_SERVER_LOG_DIRPATH_ENV_NAME: &'static str = LeanServer::LOG_DIRPATH_ENV_NAME;
 
   async fn run(self) -> Result<(), Error> {
@@ -49,7 +51,7 @@ enum Command {
 
 #[derive(Parser)]
 pub struct CliArgs {
-  #[arg(long = "log-level", default_value_t = LevelFilter::INFO)]
+  #[arg(long = "log-level", default_value_t = LevelFilter::INFO, env = Self::LOG_LEVEL_ENV_NAME)]
   log_level_filter: LevelFilter,
 
   #[arg(long)]
@@ -64,6 +66,7 @@ impl CliArgs {
   const DEFAULT_TOKIO_CONSOLE_PORT: u16 = ConsoleServer::DEFAULT_PORT;
   const DEFAULT_TOKIO_CONSOLE_IP_ADDR: IpAddr = ConsoleServer::DEFAULT_IP;
   const LOGGING_FMT_SPAN: FmtSpan = FmtSpan::CLOSE;
+  const LOG_LEVEL_ENV_NAME: &'static str = "LOG_LEVEL";
 
   fn log_writer() -> StdoutLock<'static> {
     std::io::stdout().lock()
