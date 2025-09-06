@@ -96,7 +96,7 @@ pub trait Utils {
   where
     Self: AsRef<Path>,
   {
-    format!("file:///{}", self.absolute()?.to_str_ok()?).ok()
+    format!("file://{}", self.absolute()?.to_str_ok()?).ok()
   }
 }
 
