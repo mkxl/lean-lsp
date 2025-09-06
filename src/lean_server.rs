@@ -1,7 +1,4 @@
-use std::{
-  collections::HashMap,
-  path::{Path, PathBuf},
-};
+use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Error};
 use bytes::{Buf, BytesMut};
@@ -19,12 +16,11 @@ pub struct LeanServer {
 
 impl LeanServer {
   pub const LOG_DIRPATH_ENV_NAME: &'static str = "LEAN_SERVER_LOG_DIR";
-  const INITIALIZE_JSON: &'static [u8] = include_bytes!("./initialize.json");
 
   const SEPARATOR: &'static [u8] = b"\r\n\r\n";
 
   pub fn new(project_dirpath: &Path, log_dirpath: Option<&Path>) -> Result<Self, Error> {
-    let project_absolute_dirpath = std::path::absolute(project_dirpath)?;
+    let project_absolute_dirpath = project_dirpath.absolute()?;
     let process = Self::process(project_dirpath, log_dirpath)?;
     let stdout_buf = BytesMut::new();
     let lean_server = Self {
@@ -71,7 +67,7 @@ impl LeanServer {
     let content_byte_str = &self.stdout_buf[content_begin_idx..content_end_idx];
     let message = serde_json::from_slice::<Json>(content_byte_str)?;
 
-    tracing::info!(message = "received message", %message);
+    tracing::info!(message = "received message", response = %message);
 
     // NOTE: pop bytes from beginning of buffer
     self.stdout_buf.advance(content_end_idx);
@@ -97,26 +93,8 @@ impl LeanServer {
   }
 
   pub async fn run(&mut self) -> Result<(), Error> {
-    let mut initialize_request: HashMap<&'static str, Json> = serde_json::from_slice(Self::INITIALIZE_JSON)?;
-
-    let root_str = self.project_absolute_dirpath.to_str().context("path is not utf8")?;
-    let root_uri = format!("file://{root_str}");
-    let project_name = self
-      .project_absolute_dirpath
-      .file_name()
-      .context("path has no basename")?;
-
-    initialize_request.insert("rootPath", root_str.into());
-    initialize_request.insert("rootUri", root_uri.clone().into());
-    initialize_request.insert(
-      "workspaceFolders",
-      serde_json::json!([
-        {
-          "uri": root_uri,
-          "name": project_name,
-        }
-      ]),
-    );
+    let process_id = self.process.id().context("no process id")?.into();
+    let initialize_request = crate::messages::initialize(&self.project_absolute_dirpath, process_id)?;
 
     self.send(initialize_request).await?;
 
