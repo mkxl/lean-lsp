@@ -9,7 +9,7 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use crate::{process::Process, utils::Utils};
 
 pub struct LeanServer {
-  project_absolute_dirpath: PathBuf,
+  project_dirpath: PathBuf,
   process: Process,
   stdout_buf: BytesMut,
 }
@@ -20,11 +20,11 @@ impl LeanServer {
   const SEPARATOR: &'static [u8] = b"\r\n\r\n";
 
   pub fn new(project_dirpath: &Path, log_dirpath: Option<&Path>) -> Result<Self, Error> {
-    let project_absolute_dirpath = project_dirpath.absolute()?;
-    let process = Self::process(project_dirpath, log_dirpath)?;
+    let project_dirpath = project_dirpath.absolute()?;
+    let process = Self::process(&project_dirpath, log_dirpath)?;
     let stdout_buf = BytesMut::new();
     let lean_server = Self {
-      project_absolute_dirpath,
+      project_dirpath,
       process,
       stdout_buf,
     };
@@ -42,12 +42,9 @@ impl LeanServer {
   async fn next_message(&mut self) -> Result<Json, Error> {
     let (content_begin_idx, content_end_idx) = loop {
       if let Some((separator_begin_idx, separator_end_idx)) = self.stdout_buf.substr_interval(Self::SEPARATOR) {
-        let Some((_space_begin_idx, space_end_idx)) =
+        let (_space_begin_idx, space_end_idx) =
           // TODO-4eef0b
-          self.stdout_buf[..separator_begin_idx].substr_interval(b" ")
-        else {
-          anyhow::bail!("invalid header")
-        };
+          self.stdout_buf[..separator_begin_idx].substr_interval(b" ").context("invalid header")?;
         let content_length = self.stdout_buf[space_end_idx..separator_begin_idx]
           .as_utf8()?
           .parse::<usize>()?;
@@ -93,8 +90,8 @@ impl LeanServer {
   }
 
   pub async fn run(&mut self) -> Result<(), Error> {
-    let process_id = self.process.id().context("no process id")?.into();
-    let initialize_request = crate::messages::initialize(&self.project_absolute_dirpath, process_id)?;
+    let process_id = std::process::id();
+    let initialize_request = crate::messages::initialize(&self.project_dirpath, process_id)?;
 
     self.send(initialize_request).await?;
 

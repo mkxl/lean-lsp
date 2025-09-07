@@ -2,11 +2,12 @@ use serde::Serialize;
 
 use serde_json::Value as Json;
 
-pub fn initialize_json<RootPath, RootUri, RootName>(
+#[allow(clippy::too_many_lines)]
+pub fn json<RootPath, RootUri, RootName>(
   root_path: RootPath,
   root_uri: RootUri,
   root_name: RootName,
-  process_id: u64,
+  process_id: u32,
 ) -> Json
 where
   RootPath: Serialize,

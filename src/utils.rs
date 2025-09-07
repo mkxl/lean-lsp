@@ -75,7 +75,7 @@ pub trait Utils {
   where
     Self: AsRef<Path>,
   {
-    std::path::absolute(self).context("path is not absolute")
+    std::path::absolute(self)?.ok()
   }
 
   fn file_name_ok(&self) -> Result<&OsStr, Error>

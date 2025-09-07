@@ -25,7 +25,7 @@ impl Serve {
 
 #[derive(Args)]
 struct Run {
-  #[arg(default_value = Self::DEFAULT_LEAN_PATH)]
+  #[arg(default_value = Self::DEFAULT_LEAN_PATH_STR)]
   lean_path: PathBuf,
 
   #[arg(long = "log-dir", env = Self::LEAN_SERVER_LOG_DIRPATH_ENV_NAME)]
@@ -33,7 +33,7 @@ struct Run {
 }
 
 impl Run {
-  const DEFAULT_LEAN_PATH: &'static str = ".";
+  const DEFAULT_LEAN_PATH_STR: &'static str = ".";
   const LEAN_SERVER_LOG_DIRPATH_ENV_NAME: &'static str = LeanServer::LOG_DIRPATH_ENV_NAME;
 
   async fn run(self) -> Result<(), Error> {
