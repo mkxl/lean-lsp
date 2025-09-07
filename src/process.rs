@@ -5,7 +5,7 @@ use std::{
   process::{ExitStatus, Stdio},
 };
 
-use anyhow::Error;
+use anyhow::{Context, Error};
 use tokio::process::{Child, ChildStderr, ChildStdin, ChildStdout, Command};
 
 use crate::utils::Utils;
@@ -63,10 +63,7 @@ impl Process {
   }
 
   fn take_stdio<T>(stdio: &mut Option<T>) -> Result<T, Error> {
-    match stdio.take() {
-      Some(stdio) => stdio.ok(),
-      None => anyhow::bail!("unable to set up stdio for process"),
-    }
+    stdio.take().context("unable to set up stdio for process")
   }
 
   pub fn stdin_mut(&mut self) -> &mut ChildStdin {

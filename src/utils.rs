@@ -1,6 +1,11 @@
-use std::{marker::Unpin, str::Utf8Error};
+use std::{
+  ffi::OsStr,
+  marker::Unpin,
+  path::{Path, PathBuf},
+  str::Utf8Error,
+};
 
-use anyhow::Error;
+use anyhow::{Context, Error};
 use serde::Serialize;
 use serde_json::Error as SerdeJsonError;
 use tokio::io::AsyncReadExt;
@@ -64,6 +69,34 @@ pub trait Utils {
     Self: Serialize,
   {
     serde_json::to_string(self)
+  }
+
+  fn absolute(&self) -> Result<PathBuf, Error>
+  where
+    Self: AsRef<Path>,
+  {
+    std::path::absolute(self)?.ok()
+  }
+
+  fn file_name_ok(&self) -> Result<&OsStr, Error>
+  where
+    Self: AsRef<Path>,
+  {
+    self.as_ref().file_name().context("path has no file_name")
+  }
+
+  fn to_str_ok(&self) -> Result<&str, Error>
+  where
+    Self: AsRef<Path>,
+  {
+    self.as_ref().to_str().context("path is not utf8")
+  }
+
+  fn to_uri(&self) -> Result<String, Error>
+  where
+    Self: AsRef<Path>,
+  {
+    format!("file://{}", self.absolute()?.to_str_ok()?).ok()
   }
 }
 
