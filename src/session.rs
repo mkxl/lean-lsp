@@ -1,32 +1,73 @@
 use std::path::{Path, PathBuf};
 
 use anyhow::Error;
+use derive_more::Constructor;
+use tokio::{
+  sync::{
+    mpsc::{Receiver as MpscReceiver, Sender as MpscSender},
+    oneshot::Sender as OneshotSender,
+  },
+  task::JoinHandle,
+};
 use ulid::Ulid;
 
 use crate::{lean_server::LeanServer, utils::Utils};
 
+pub enum SessionCommand {
+  Noop { sender: OneshotSender<()> },
+}
+
+#[derive(Clone, Constructor)]
+pub struct SessionClient {
+  sender: MpscSender<SessionCommand>,
+}
+
+impl SessionClient {
+  // TODO-8dffbb
+  #[allow(dead_code)]
+  pub async fn noop(&self) -> Result<(), Error> {
+    let (sender, receiver) = tokio::sync::oneshot::channel();
+    let noop_command = SessionCommand::Noop { sender };
+
+    self.sender.send(noop_command).await?;
+
+    receiver.await?.ok()
+  }
+}
+
 pub struct Session {
-  key: Ulid,
-  lean_server: LeanServer,
+  id: Ulid,
+  lean_server_run_task: JoinHandle<Result<(), Error>>,
   project_dirpath: PathBuf,
+  receiver: MpscReceiver<SessionCommand>,
 }
 
 impl Session {
+  const COMMAND_CHANNEL_BUFFER_SIZE: usize = 64;
   const MANIFEST_FILE_NAME: &'static str = "lake-manifest.json";
 
-  pub fn new(lean_path: &Path, lean_server_log_dirpath: Option<&Path>) -> Result<Self, Error> {
-    let key = Ulid::new();
+  pub fn new(lean_path: &Path, lean_server_log_dirpath: Option<&Path>) -> Result<(Self, SessionClient), Error> {
+    let id = Ulid::new();
     let project_dirpath = Self::project_dirpath(lean_path)?;
-    let lean_server = LeanServer::new(&project_dirpath, lean_server_log_dirpath)?;
+    let lean_server_run_task = LeanServer::new(&project_dirpath, lean_server_log_dirpath)?
+      .run()
+      .spawn_task();
+    let (sender, receiver) = tokio::sync::mpsc::channel(Self::COMMAND_CHANNEL_BUFFER_SIZE);
     let session = Self {
-      key,
-      lean_server,
+      id,
+      lean_server_run_task,
       project_dirpath,
+      receiver,
     };
+    let session_client = SessionClient::new(sender);
 
-    tracing::info!(message = "new session", key = %session.key, project_dirpath = %session.project_dirpath.display());
+    tracing::info!(id = %session.id, project_dirpath = %session.project_dirpath.display(), "new session");
 
-    session.ok()
+    (session, session_client).ok()
+  }
+
+  pub fn id(&self) -> Ulid {
+    self.id
   }
 
   fn project_dirpath(lean_path: &Path) -> Result<PathBuf, Error> {
@@ -43,7 +84,24 @@ impl Session {
     anyhow::bail!("unable to get project dirpath: no manifest file found in ancestor dirpaths");
   }
 
-  pub async fn run(&mut self) -> Result<(), Error> {
-    self.lean_server.run().await
+  #[allow(clippy::unused_async)]
+  #[tracing::instrument(skip_all)]
+  async fn process_command(&mut self, session_command: SessionCommand) -> Result<(), Error> {
+    match session_command {
+      SessionCommand::Noop { sender } => ().send_to_oneshot(sender),
+    }
+  }
+
+  #[tracing::instrument(skip_all)]
+  pub async fn run(mut self) -> Result<(), Error> {
+    loop {
+      tokio::select! {
+        session_command_opt = self.receiver.recv() => match session_command_opt {
+          Some(session_command) => self.process_command(session_command).await?,
+          None => return tracing::info!("session client has been dropped, ending session run loop...").ok()
+        },
+        result = &mut self.lean_server_run_task => result??,
+      }
+    }
   }
 }

@@ -1,6 +1,5 @@
 use serde::Serialize;
-
-use serde_json::Value as Json;
+use serde_json::Value as JsonValue;
 
 #[allow(clippy::too_many_lines)]
 pub fn json<RootPath, RootUri, RootName>(
@@ -8,7 +7,7 @@ pub fn json<RootPath, RootUri, RootName>(
   root_uri: RootUri,
   root_name: RootName,
   process_id: u32,
-) -> Json
+) -> JsonValue
 where
   RootPath: Serialize,
   RootName: Serialize,

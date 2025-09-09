@@ -1,5 +1,7 @@
 use std::{
+  borrow::Borrow,
   ffi::OsStr,
+  fmt::Display,
   marker::Unpin,
   path::{Path, PathBuf},
   str::Utf8Error,
@@ -7,15 +9,52 @@ use std::{
 
 use anyhow::{Context, Error};
 use serde::Serialize;
-use serde_json::Error as SerdeJsonError;
-use tokio::io::AsyncReadExt;
+use serde_json::{Error as SerdeJsonError, Value as JsonValue};
+use tokio::{io::AsyncReadExt, sync::oneshot::Sender as OneshotSender, task::JoinHandle};
+
+use crate::valued::Valued;
 
 pub trait Utils {
+  fn absolute(&self) -> Result<PathBuf, Error>
+  where
+    Self: AsRef<Path>,
+  {
+    std::path::absolute(self)?.ok()
+  }
+
   fn as_utf8(&self) -> Result<&str, Utf8Error>
   where
     Self: AsRef<[u8]>,
   {
     str::from_utf8(self.as_ref())
+  }
+
+  fn cat<T: Display>(&self, rhs: T) -> String
+  where
+    Self: Display,
+  {
+    std::format!("{self}{rhs}")
+  }
+
+  fn file_name_ok(&self) -> Result<&OsStr, Error>
+  where
+    Self: AsRef<Path>,
+  {
+    self.as_ref().file_name().context("path has no file_name")
+  }
+
+  fn json_byte_str(&self) -> Result<Vec<u8>, SerdeJsonError>
+  where
+    Self: Serialize,
+  {
+    serde_json::to_vec(self)
+  }
+
+  fn json_value(&self) -> Result<JsonValue, SerdeJsonError>
+  where
+    Self: Serialize,
+  {
+    serde_json::to_value(self)
   }
 
   fn ok<E>(self) -> Result<Self, E>
@@ -43,11 +82,29 @@ pub trait Utils {
     string.ok()
   }
 
+  fn send_to_oneshot(self, sender: OneshotSender<Self>) -> Result<(), Error>
+  where
+    Self: Sized,
+  {
+    match sender.send(self) {
+      Ok(()) => ().ok(),
+      Err(_self) => anyhow::bail!("unable to send value over oneshot channel"),
+    }
+  }
+
   fn some(self) -> Option<Self>
   where
     Self: Sized,
   {
     Some(self)
+  }
+
+  fn spawn_task(self) -> JoinHandle<Self::Output>
+  where
+    Self: 'static + Future + Sized + Send,
+    Self::Output: 'static + Send,
+  {
+    tokio::spawn(self)
   }
 
   // TODO-4eef0b: permit reverse search
@@ -64,27 +121,6 @@ pub trait Utils {
     (begin, end).some()
   }
 
-  fn json_string(&self) -> Result<String, SerdeJsonError>
-  where
-    Self: Serialize,
-  {
-    serde_json::to_string(self)
-  }
-
-  fn absolute(&self) -> Result<PathBuf, Error>
-  where
-    Self: AsRef<Path>,
-  {
-    std::path::absolute(self)?.ok()
-  }
-
-  fn file_name_ok(&self) -> Result<&OsStr, Error>
-  where
-    Self: AsRef<Path>,
-  {
-    self.as_ref().file_name().context("path has no file_name")
-  }
-
   fn to_str_ok(&self) -> Result<&str, Error>
   where
     Self: AsRef<Path>,
@@ -96,7 +132,14 @@ pub trait Utils {
   where
     Self: AsRef<Path>,
   {
-    format!("file://{}", self.absolute()?.to_str_ok()?).ok()
+    "file://".cat(self.absolute()?.to_str_ok()?).ok()
+  }
+
+  fn valued(&self) -> Valued<'_>
+  where
+    Self: Borrow<JsonValue>,
+  {
+    Valued(self.borrow())
   }
 }
 
