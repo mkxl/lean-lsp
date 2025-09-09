@@ -12,12 +12,12 @@ impl Valuable for Valued<'_> {
       JsonValue::Bool(boolean) => Value::Bool(*boolean),
       JsonValue::Number(number) => {
         // NOTE: intentioanlly check i128 and u128 before f64
-        if let Some(num_i128) = number.as_i128() {
-          Value::I128(num_i128)
-        } else if let Some(num_u128) = number.as_u128() {
-          Value::U128(num_u128)
-        } else if let Some(num_f64) = number.as_f64() {
-          Value::F64(num_f64)
+        if let Some(number_i128) = number.as_i128() {
+          Value::I128(number_i128)
+        } else if let Some(number_u128) = number.as_u128() {
+          Value::U128(number_u128)
+        } else if let Some(number_f64) = number.as_f64() {
+          Value::F64(number_f64)
         } else {
           Value::F64(f64::NAN)
         }
@@ -36,7 +36,7 @@ impl Valuable for Valued<'_> {
       JsonValue::Object(json_map) => json_map
         .iter()
         .for_each(|(key, value)| visit.visit_entry(Value::String(key), value.valued().as_value())),
-      _json => visit.visit_value(self.as_value()),
+      _json_value => visit.visit_value(self.as_value()),
     }
   }
 }
