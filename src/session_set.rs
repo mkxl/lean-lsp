@@ -112,6 +112,7 @@ impl SessionSet {
     tracing::info!(%session_id, "cleaned up session");
   }
 
+  // TODO-8dffbb
   #[tracing::instrument(skip_all)]
   async fn run(mut self) -> Result<(), Error> {
     loop {
@@ -135,9 +136,10 @@ impl SessionSet {
     let session_set_run_task = session_set.run().spawn_task();
 
     // NOTE:
-    // - if session_set.run() is not already running, then this will hang, as it's
-    //   session_set that processes the issued NewSession command
-    // - assign the result of session_set_client.new_session() to a variable to
+    // - if [session_set.run()] is not already running, then
+    //   [session_set_client.new_session()] will hang, as it is the
+    //   [session_set.run()] that processes the issued [NewSession] command
+    // - assign the result of [session_set_client.new_session()] to a variable to
     //   prevent it from being immediately dropped and closing the associated
     //   Session object's receiver
     let _session_client = session_set_client
