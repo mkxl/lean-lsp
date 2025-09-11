@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Error};
 use bytes::{Buf, BytesMut};
 use serde::Serialize;
-use serde_json::Value as JsonValue;
+use serde_json::Value as Json;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use valuable::Valuable;
 
@@ -40,7 +40,7 @@ impl LeanServer {
     process.ok()
   }
 
-  async fn next_response(&mut self) -> Result<JsonValue, Error> {
+  async fn next_response(&mut self) -> Result<Json, Error> {
     let (content_begin_idx, content_end_idx) = loop {
       if let Some((separator_begin_idx, separator_end_idx)) = self.stdout_buf.substr_interval(Self::SEPARATOR) {
         let (_space_begin_idx, space_end_idx) =
@@ -63,9 +63,9 @@ impl LeanServer {
     }
 
     let content_byte_str = &self.stdout_buf[content_begin_idx..content_end_idx];
-    let response = serde_json::from_slice::<JsonValue>(content_byte_str)?;
+    let response = serde_json::from_slice::<Json>(content_byte_str)?;
 
-    tracing::info!(response = response.valued().as_value(), "received response");
+    tracing::info!(response = response.as_value(), "received response");
 
     // NOTE: pop bytes from beginning of buffer
     self.stdout_buf.advance(content_end_idx);
@@ -84,7 +84,7 @@ impl LeanServer {
     stdin.write_all(&json_byte_str).await?;
     stdin.flush().await?;
 
-    tracing::info!(json_value = value.json_value()?.valued().as_value(), "sent message");
+    tracing::info!(json = value.json()?.as_value(), "sent message");
 
     ().ok()
   }
@@ -100,7 +100,7 @@ impl LeanServer {
     let stdout = self.process.stdout_mut().read_string().await?;
     let stderr = self.process.stderr_mut().read_string().await?;
 
-    tracing::info!(%response, stdout, stderr, %exit_status, "lean server process complete");
+    tracing::info!(response = response.as_value(), stdout, stderr, %exit_status, "lean server process complete");
 
     ().ok()
   }

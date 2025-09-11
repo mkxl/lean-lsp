@@ -1,5 +1,4 @@
 use std::{
-  borrow::Borrow,
   ffi::OsStr,
   fmt::Display,
   marker::Unpin,
@@ -9,10 +8,8 @@ use std::{
 
 use anyhow::{Context, Error};
 use serde::Serialize;
-use serde_json::{Error as SerdeJsonError, Value as JsonValue};
+use serde_json::{Error as SerdeJsonError, Value as Json};
 use tokio::{io::AsyncReadExt, sync::oneshot::Sender as OneshotSender, task::JoinHandle};
-
-use crate::valued::Valued;
 
 pub trait Utils {
   fn absolute(&self) -> Result<PathBuf, Error>
@@ -50,7 +47,7 @@ pub trait Utils {
     serde_json::to_vec(self)
   }
 
-  fn json_value(&self) -> Result<JsonValue, SerdeJsonError>
+  fn json(&self) -> Result<Json, SerdeJsonError>
   where
     Self: Serialize,
   {
@@ -86,10 +83,11 @@ pub trait Utils {
   where
     Self: Sized,
   {
-    match sender.send(self) {
-      Ok(()) => ().ok(),
-      Err(_self) => anyhow::bail!("unable to send value over oneshot channel"),
-    }
+    // NOTE: drop error variant which wraps [Self] and may not implement [StdError]
+    sender
+      .send(self)
+      .ok()
+      .context("unable to send value over oneshot channel")
   }
 
   fn some(self) -> Option<Self>
@@ -133,13 +131,6 @@ pub trait Utils {
     Self: AsRef<Path>,
   {
     "file://".cat(self.absolute()?.to_str_ok()?).ok()
-  }
-
-  fn valued(&self) -> Valued<'_>
-  where
-    Self: Borrow<JsonValue>,
-  {
-    Valued(self.borrow())
   }
 }
 

@@ -54,7 +54,7 @@ impl SessionSetClient {
 
 pub struct SessionSet {
   receiver: MpscReceiver<SessionSetCommand>,
-  sessions: HashMap<Ulid, Session>,
+  session_clients: HashMap<Ulid, SessionClient>,
   join_set: JoinSet<(Ulid, Result<(), Error>)>,
 }
 
@@ -63,11 +63,11 @@ impl SessionSet {
 
   pub fn new() -> (Self, SessionSetClient) {
     let (sender, receiver) = tokio::sync::mpsc::channel(Self::COMMAND_CHANNEL_BUFFER_SIZE);
-    let sessions = HashMap::new();
+    let session_clients = HashMap::new();
     let join_set = JoinSet::new();
     let session_set = Self {
       receiver,
-      sessions,
+      session_clients,
       join_set,
     };
     let session_set_client = SessionSetClient::new(sender);
@@ -77,8 +77,10 @@ impl SessionSet {
 
   fn new_session(&mut self, lean_path: &Path, lean_server_log_dirpath: Option<&Path>) -> Result<SessionClient, Error> {
     let (session, session_client) = Session::new(lean_path, lean_server_log_dirpath)?;
+    let session_id = session.id();
     let run_future = async move { (session.id(), session.run().await) };
 
+    self.session_clients.insert(session_id, session_client.clone());
     self.join_set.spawn(run_future);
 
     session_client.ok()
@@ -101,7 +103,7 @@ impl SessionSet {
   }
 
   fn cleanup_session(&mut self, session_id: Ulid, result: Result<(), Error>) {
-    self.sessions.remove(&session_id);
+    self.session_clients.remove(&session_id);
 
     if let Err(session_error) = result {
       tracing::warn!(%session_error, "error running session");

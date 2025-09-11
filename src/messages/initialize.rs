@@ -1,29 +1,24 @@
-use serde::Serialize;
-use serde_json::Value as JsonValue;
+use std::path::Path;
+
+use anyhow::Error;
+use serde_json::Value as Json;
+
+use crate::utils::Utils;
 
 #[allow(clippy::too_many_lines)]
-pub fn json_value<RootPath, RootUri, RootName>(
-  root_path: RootPath,
-  root_uri: RootUri,
-  root_name: RootName,
-  process_id: u32,
-) -> JsonValue
-where
-  RootPath: Serialize,
-  RootName: Serialize,
-  RootUri: Serialize,
-{
-  serde_json::json!({
+pub fn json(root_path: &Path, process_id: u32) -> Result<Json, Error> {
+  let root_path = root_path.absolute()?;
+  let json = serde_json::json!({
     "jsonrpc": "2.0",
     "id": 0,
     "method": "initialize",
     "params": {
       "rootPath": root_path,
-      "rotUri": root_uri,
+      "rotUri": root_path.to_uri()?,
       "workspaceFolders": [
         {
-          "uri": root_uri,
-          "name": root_name,
+          "uri": root_path.to_uri()?,
+          "name": root_path.file_name_ok()?,
         }
       ],
       "processId": process_id,
@@ -500,5 +495,7 @@ where
       },
       "trace": "off"
     }
-  })
+  });
+
+  json.ok()
 }

@@ -306,7 +306,7 @@ dependencies = [
  "prost",
  "prost-types",
  "serde",
- "serde_json",
+ "serde_json 1.0.143",
  "thread_local",
  "tokio",
  "tokio-stream",
@@ -693,7 +693,7 @@ dependencies = [
  "console-subscriber",
  "derive_more",
  "serde",
- "serde_json",
+ "serde_json 1.0.144",
  "tokio",
  "tracing",
  "tracing-subscriber",
@@ -1045,6 +1045,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "serde_json"
+version = "1.0.144"
+source = "git+https://github.com/mkxl/serde-json#664f6c10e6874e063d10bc70e9b124b9c326f399"
+dependencies = [
+ "itoa",
+ "memchr",
+ "ryu",
+ "serde",
+ "valuable",
+]
+
+[[package]]
 name = "sharded-slab"
 version = "0.1.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1323,7 +1335,7 @@ dependencies = [
  "once_cell",
  "regex-automata",
  "serde",
- "serde_json",
+ "serde_json 1.0.143",
  "sharded-slab",
  "smallvec",
  "thread_local",
