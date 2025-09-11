@@ -8,16 +8,17 @@ use crate::utils::Utils;
 #[allow(clippy::too_many_lines)]
 pub fn json(root_path: &Path, process_id: u32) -> Result<Json, Error> {
   let root_path = root_path.absolute()?;
+  let root_uri = root_path.to_uri()?;
   let json = serde_json::json!({
     "jsonrpc": "2.0",
     "id": 0,
     "method": "initialize",
     "params": {
       "rootPath": root_path,
-      "rotUri": root_path.to_uri()?,
+      "rootUri": root_uri,
       "workspaceFolders": [
         {
-          "uri": root_path.to_uri()?,
+          "uri": root_uri,
           "name": root_path.file_name_ok()?,
         }
       ],
