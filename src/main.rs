@@ -5,6 +5,7 @@ mod lean_server;
 mod messages;
 mod process;
 mod session;
+mod session_set;
 mod utils;
 
 use anyhow::Error;

@@ -5,6 +5,7 @@ use bytes::{Buf, BytesMut};
 use serde::Serialize;
 use serde_json::Value as Json;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use valuable::Valuable;
 
 use crate::{process::Process, utils::Utils};
 
@@ -39,7 +40,7 @@ impl LeanServer {
     process.ok()
   }
 
-  async fn next_message(&mut self) -> Result<Json, Error> {
+  async fn next_response(&mut self) -> Result<Json, Error> {
     let (content_begin_idx, content_end_idx) = loop {
       if let Some((separator_begin_idx, separator_end_idx)) = self.stdout_buf.substr_interval(Self::SEPARATOR) {
         let (_space_begin_idx, space_end_idx) =
@@ -62,45 +63,44 @@ impl LeanServer {
     }
 
     let content_byte_str = &self.stdout_buf[content_begin_idx..content_end_idx];
-    let message = serde_json::from_slice::<Json>(content_byte_str)?;
+    let response = serde_json::from_slice::<Json>(content_byte_str)?;
 
-    tracing::info!(message = "received message", response = %message);
+    tracing::info!(response = response.as_value(), "received response");
 
     // NOTE: pop bytes from beginning of buffer
     self.stdout_buf.advance(content_end_idx);
 
-    message.ok()
+    response.ok()
   }
 
   pub async fn send<T: Serialize>(&mut self, value: T) -> Result<(), Error> {
     let stdin = self.process.stdin_mut();
-    let json_str = value.json_string()?;
-    let json_byte_str = json_str.as_bytes();
+    let json_byte_str = value.json_byte_str()?;
     let content_length_byte_str = json_byte_str.len().to_string().into_bytes();
 
     stdin.write_all(b"Content-Length: ").await?;
     stdin.write_all(&content_length_byte_str).await?;
     stdin.write_all(Self::SEPARATOR).await?;
-    stdin.write_all(json_byte_str).await?;
+    stdin.write_all(&json_byte_str).await?;
     stdin.flush().await?;
 
-    tracing::info!(message = "sent message", json_str);
+    tracing::info!(json = value.json()?.as_value(), "sent message");
 
     ().ok()
   }
 
-  pub async fn run(&mut self) -> Result<(), Error> {
+  pub async fn run(mut self) -> Result<(), Error> {
     let process_id = std::process::id();
     let initialize_request = crate::messages::initialize(&self.project_dirpath, process_id)?;
 
     self.send(initialize_request).await?;
 
-    let response = self.next_message().await?;
+    let response = self.next_response().await?;
     let exit_status = self.process.run().await?;
     let stdout = self.process.stdout_mut().read_string().await?;
     let stderr = self.process.stderr_mut().read_string().await?;
 
-    tracing::info!(message = "lean server process complete", %response, stdout, stderr, %exit_status);
+    tracing::info!(response = response.as_value(), stdout, stderr, %exit_status, "lean server process complete");
 
     ().ok()
   }
