@@ -1,4 +1,4 @@
-use std::{io::StdoutLock, net::IpAddr, path::PathBuf};
+use std::{io::StdoutLock, net::IpAddr};
 
 use anyhow::Error;
 use clap::{Args, Parser, Subcommand};
@@ -26,10 +26,10 @@ impl Serve {
 #[derive(Args)]
 struct Run {
   #[arg(default_value = Self::DEFAULT_LEAN_PATH_STR)]
-  lean_path: PathBuf,
+  lean_path: String,
 
   #[arg(long = "log-dir", env = Self::LEAN_SERVER_LOG_DIRPATH_ENV_NAME)]
-  lean_server_log_dirpath: Option<PathBuf>,
+  lean_server_log_dirpath: Option<String>,
 }
 
 impl Run {

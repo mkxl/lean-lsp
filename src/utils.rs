@@ -76,11 +76,11 @@ pub trait Utils {
     self
   }
 
-  fn map_into<X, Y: From<X>>(self) -> Option<Y>
+  fn map_ref<'a, Y: ?Sized, X: 'a + AsRef<Y> + ?Sized>(self) -> Option<&'a Y>
   where
-    Self: Is<Option<X>> + Sized,
+    Self: Is<Option<&'a X>> + Sized,
   {
-    self.take().map(Y::from)
+    self.take().map(X::as_ref)
   }
 
   fn ok<E>(self) -> Result<Self, E>

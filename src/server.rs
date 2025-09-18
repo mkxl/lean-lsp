@@ -1,18 +1,26 @@
-mod commands;
-
 use std::net::Ipv4Addr;
 
 use anyhow::Error;
+use derive_more::From;
 use poem::{EndpointExt, Error as PoemError, Route, Server as PoemServer, listener::TcpListener, middleware::Tracing};
-use poem_openapi::{OpenApi, OpenApiService, payload::Json};
+use poem_openapi::{Object, OpenApi, OpenApiService, payload::Json};
 use uuid::Uuid;
 
 use crate::{
-  server::commands::{GetSessionsResult, NewSessionCommand, NewSessionResult},
   session::SessionClient,
-  session_set::{SessionSet, SessionSetClient},
+  session_set::{NewSessionCommand, SessionSet, SessionSetClient},
   utils::Utils,
 };
+
+#[derive(From, Object)]
+pub struct NewSessionResult {
+  pub session_id: Uuid,
+}
+
+#[derive(From, Object)]
+pub struct GetSessionsResult {
+  pub session_ids: Vec<Uuid>,
+}
 
 pub struct Server {
   session_set_client: SessionSetClient,
@@ -55,7 +63,7 @@ impl Server {
   async fn new_session(&self, Json(command): Json<NewSessionCommand>) -> Result<Json<NewSessionResult>, PoemError> {
     self
       .session_set_client
-      .new_session(command.lean_path.into(), command.lean_server_log_dirpath.map_into())
+      .new_session(command.lean_path, command.lean_server_log_dirpath)
       .await?
       .id()
       .convert::<NewSessionResult>()

@@ -51,10 +51,10 @@ impl Session {
   const COMMAND_CHANNEL_BUFFER_SIZE: usize = 64;
   const MANIFEST_FILE_NAME: &'static str = "lake-manifest.json";
 
-  pub fn new(lean_path: &Path, lean_server_log_dirpath: Option<&Path>) -> Result<(Self, SessionClient), Error> {
+  pub fn new(lean_path: &str, lean_server_log_dirpath: Option<&str>) -> Result<(Self, SessionClient), Error> {
     let id = Uuid::new_v4();
-    let project_dirpath = Self::project_dirpath(lean_path)?;
-    let lean_server_run_task = LeanServer::new(&project_dirpath, lean_server_log_dirpath)?
+    let project_dirpath = Self::project_dirpath(lean_path.as_ref())?;
+    let lean_server_run_task = LeanServer::new(&project_dirpath, lean_server_log_dirpath.map_ref())?
       .run()
       .spawn_task();
     let (sender, receiver) = tokio::sync::mpsc::channel(Self::COMMAND_CHANNEL_BUFFER_SIZE);
