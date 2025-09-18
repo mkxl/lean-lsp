@@ -7,7 +7,7 @@ use tracing_subscriber::{
   Layer, filter::LevelFilter, fmt::format::FmtSpan, layer::SubscriberExt, util::SubscriberInitExt,
 };
 
-use crate::{lean_server::LeanServer, session_set::SessionSet, utils::Utils};
+use crate::{lean_server::LeanServer, server::Server, session_set::SessionSet};
 
 #[derive(Args)]
 struct Serve {
@@ -19,7 +19,7 @@ impl Serve {
   const DEFAULT_PORT: u16 = 8080;
 
   async fn run(self) -> Result<(), Error> {
-    std::future::pending().await
+    Server::serve(self.port).await
   }
 }
 
@@ -52,7 +52,7 @@ pub struct CliArgs {
   #[arg(long = "log-level", default_value_t = LevelFilter::INFO, env = Self::LOG_LEVEL_ENV_NAME)]
   log_level_filter: LevelFilter,
 
-  #[arg(long = "tokio-console")]
+  #[arg(long = "tokio-console", require_equals = true)]
   #[allow(clippy::option_option)]
   tokio_console_port: Option<Option<u16>>,
 
@@ -73,7 +73,7 @@ impl CliArgs {
     FmtSpan::NEW | FmtSpan::CLOSE
   }
 
-  fn init_tracing(&self) -> Result<(), Error> {
+  fn init_tracing(&self) {
     let log_layer = tracing_subscriber::fmt::layer()
       .with_span_events(Self::tracing_span_events())
       .with_writer(Self::log_writer)
@@ -90,12 +90,10 @@ impl CliArgs {
     } else {
       registry.init();
     }
-
-    ().ok()
   }
 
   pub async fn run(self) -> Result<(), Error> {
-    self.init_tracing()?;
+    self.init_tracing();
 
     match self.command {
       Command::Serve(serve) => serve.run().await,

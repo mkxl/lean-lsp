@@ -1,15 +1,19 @@
 use std::{
+  borrow::Borrow,
   ffi::OsStr,
-  fmt::Display,
+  fmt::{Debug, Display},
   marker::Unpin,
   path::{Path, PathBuf},
   str::Utf8Error,
 };
 
 use anyhow::{Context, Error};
+use poem_openapi::payload::Json as PoemJson;
 use serde::Serialize;
 use serde_json::{Error as SerdeJsonError, Value as Json};
 use tokio::{io::AsyncReadExt, sync::oneshot::Sender as OneshotSender, task::JoinHandle};
+
+use crate::is::Is;
 
 pub trait Utils {
   fn absolute(&self) -> Result<PathBuf, Error>
@@ -33,6 +37,13 @@ pub trait Utils {
     std::format!("{self}{rhs}")
   }
 
+  fn convert<T: From<Self>>(self) -> T
+  where
+    Self: Sized,
+  {
+    self.into()
+  }
+
   fn file_name_ok(&self) -> Result<&OsStr, Error>
   where
     Self: AsRef<Path>,
@@ -54,6 +65,24 @@ pub trait Utils {
     serde_json::to_value(self)
   }
 
+  fn log_error<T, C: Display, E: Debug + Display>(self, context: C) -> Self
+  where
+    Self: Borrow<Result<T, E>> + Sized,
+  {
+    if let Err(err) = self.borrow() {
+      tracing::warn!(?err, "{context}: {err}");
+    }
+
+    self
+  }
+
+  fn map_into<X, Y: From<X>>(self) -> Option<Y>
+  where
+    Self: Is<Option<X>> + Sized,
+  {
+    self.take().map(Y::from)
+  }
+
   fn ok<E>(self) -> Result<Self, E>
   where
     Self: Sized,
@@ -66,6 +95,13 @@ pub trait Utils {
     Self: Sized,
   {
     (self, rhs)
+  }
+
+  fn poem_json(self) -> PoemJson<Self>
+  where
+    Self: Sized,
+  {
+    PoemJson(self)
   }
 
   async fn read_string(&mut self) -> Result<String, Error>
@@ -132,6 +168,8 @@ pub trait Utils {
   {
     "file://".cat(self.absolute()?.to_str_ok()?).ok()
   }
+
+  fn unit(&self) {}
 }
 
 impl<T: ?Sized> Utils for T {}
