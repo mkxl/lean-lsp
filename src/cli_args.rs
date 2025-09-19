@@ -10,16 +10,14 @@ use tracing_subscriber::{
 use crate::{lean_server::LeanServer, server::Server, session_set::SessionSet};
 
 #[derive(Args)]
-struct Serve {
-  #[arg(long, default_value_t = Self::DEFAULT_PORT)]
+struct Get {
+  #[arg(long, default_value_t = Server::DEFAULT_PORT)]
   port: u16,
 }
 
-impl Serve {
-  const DEFAULT_PORT: u16 = 8080;
-
+impl Get {
   async fn run(self) -> Result<(), Error> {
-    Server::serve(self.port).await
+    std::future::pending().await
   }
 }
 
@@ -41,10 +39,23 @@ impl Run {
   }
 }
 
+#[derive(Args)]
+struct Serve {
+  #[arg(long, default_value_t = Server::DEFAULT_PORT)]
+  port: u16,
+}
+
+impl Serve {
+  async fn run(self) -> Result<(), Error> {
+    Server::serve(self.port).await
+  }
+}
+
 #[derive(Subcommand)]
 enum Command {
-  Serve(Serve),
+  Get(Get),
   Run(Run),
+  Serve(Serve),
 }
 
 #[derive(Parser)]
@@ -96,8 +107,9 @@ impl CliArgs {
     self.init_tracing();
 
     match self.command {
-      Command::Serve(serve) => serve.run().await,
+      Command::Get(get) => get.run().await,
       Command::Run(run) => run.run().await,
+      Command::Serve(serve) => serve.run().await,
     }
   }
 }

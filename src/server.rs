@@ -28,10 +28,12 @@ pub struct Server {
 
 #[OpenApi]
 impl Server {
+  pub const DEFAULT_PORT: u16 = 8080;
+
   const IPV4_ADDR: Ipv4Addr = Ipv4Addr::UNSPECIFIED;
+  const ROOT_PATH: &'static str = "/";
   const TITLE: &'static str = std::env!("CARGO_PKG_NAME");
   const VERSION: &'static str = std::env!("CARGO_PKG_VERSION");
-  const ROOT_PATH: &'static str = "/";
 
   fn new() -> Self {
     let (session_set, session_set_client) = SessionSet::new();
