@@ -1,9 +1,9 @@
 pub trait Is<T> {
-  fn take(self) -> T;
+  fn get(self) -> T;
 }
 
 impl<T> Is<T> for T {
-  fn take(self) -> T {
+  fn get(self) -> T {
     self
   }
 }

@@ -63,7 +63,7 @@ impl Server {
   async fn new_session(&self, Json(command): Json<NewSessionCommand>) -> Result<Json<NewSessionResult>, PoemError> {
     self
       .session_set_client
-      .new_session(command.lean_path, command.lean_server_log_dirpath)
+      .new_session(command.lean_path.into(), command.lean_server_log_dirpath.map_into())
       .await?
       .id()
       .convert::<NewSessionResult>()

@@ -2,6 +2,7 @@ use std::{
   borrow::Borrow,
   ffi::OsStr,
   fmt::{Debug, Display},
+  io::Error as IoError,
   marker::Unpin,
   path::{Path, PathBuf},
   str::Utf8Error,
@@ -16,7 +17,7 @@ use tokio::{io::AsyncReadExt, sync::oneshot::Sender as OneshotSender, task::Join
 use crate::is::Is;
 
 pub trait Utils {
-  fn absolute(&self) -> Result<PathBuf, Error>
+  fn absolute(&self) -> Result<PathBuf, IoError>
   where
     Self: AsRef<Path>,
   {
@@ -51,6 +52,16 @@ pub trait Utils {
     self.as_ref().file_name().context("path has no file_name")
   }
 
+  fn into_string(self) -> Result<String, Error>
+  where
+    Self: Is<PathBuf> + Sized,
+  {
+    match self.get().into_os_string().into_string() {
+      Ok(string) => string.ok(),
+      Err(os_string) => anyhow::bail!("{os_string:?} is not valid unicode"),
+    }
+  }
+
   fn json_byte_str(&self) -> Result<Vec<u8>, SerdeJsonError>
   where
     Self: Serialize,
@@ -76,11 +87,18 @@ pub trait Utils {
     self
   }
 
-  fn map_ref<'a, Y: ?Sized, X: 'a + AsRef<Y> + ?Sized>(self) -> Option<&'a Y>
+  fn map_into<X, Y: From<X>>(self) -> Option<Y>
+  where
+    Self: Is<Option<X>> + Sized,
+  {
+    self.get().map(Y::from)
+  }
+
+  fn map_as_ref<'a, Y: ?Sized, X: 'a + AsRef<Y> + ?Sized>(self) -> Option<&'a Y>
   where
     Self: Is<Option<&'a X>> + Sized,
   {
-    self.take().map(X::as_ref)
+    self.get().map(X::as_ref)
   }
 
   fn ok<E>(self) -> Result<Self, E>
@@ -155,18 +173,11 @@ pub trait Utils {
     (begin, end).some()
   }
 
-  fn to_str_ok(&self) -> Result<&str, Error>
-  where
-    Self: AsRef<Path>,
-  {
-    self.as_ref().to_str().context("path is not utf8")
-  }
-
   fn to_uri(&self) -> Result<String, Error>
   where
     Self: AsRef<Path>,
   {
-    "file://".cat(self.absolute()?.to_str_ok()?).ok()
+    "file://".cat(self.absolute()?.display()).ok()
   }
 
   fn unit(&self) {}

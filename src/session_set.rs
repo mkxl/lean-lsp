@@ -1,4 +1,7 @@
-use std::collections::HashMap;
+use std::{
+  collections::HashMap,
+  path::{Path, PathBuf},
+};
 
 use anyhow::Error;
 use derive_more::Constructor;
@@ -44,11 +47,14 @@ impl SessionSetClient {
   #[tracing::instrument(skip_all)]
   pub async fn new_session(
     &self,
-    lean_path: String,
-    lean_server_log_dirpath: Option<String>,
+    lean_path: PathBuf,
+    lean_server_log_dirpath: Option<PathBuf>,
   ) -> Result<SessionClient, Error> {
     let (sender, receiver) = tokio::sync::oneshot::channel();
-    let command = NewSessionCommand::new(lean_path, lean_server_log_dirpath);
+    let command = NewSessionCommand::new(
+      lean_path.into_string()?,
+      lean_server_log_dirpath.map(PathBuf::into_string).transpose()?,
+    );
     let new_session_command = SessionSetCommand::NewSession { sender, command };
 
     self.sender.send(new_session_command).await?;
@@ -90,7 +96,7 @@ impl SessionSet {
     (session_set, session_set_client)
   }
 
-  fn new_session(&mut self, lean_path: &str, lean_server_log_dirpath: Option<&str>) -> Result<SessionClient, Error> {
+  fn new_session(&mut self, lean_path: &Path, lean_server_log_dirpath: Option<&Path>) -> Result<SessionClient, Error> {
     let (session, session_client) = Session::new(lean_path, lean_server_log_dirpath)?;
     let session_id = session.id();
     let session_run_future = async move { (session.id(), session.run().await) };
@@ -110,7 +116,10 @@ impl SessionSet {
   async fn process_command(&mut self, command: SessionSetCommand) -> Result<(), Error> {
     match command {
       SessionSetCommand::NewSession { sender, command } => self
-        .new_session(&command.lean_path, command.lean_server_log_dirpath.as_deref())
+        .new_session(
+          command.lean_path.as_ref(),
+          command.lean_server_log_dirpath.as_ref().map_as_ref(),
+        )
         .send_to_oneshot(sender)?,
       SessionSetCommand::GetSessions { sender } => self.get_sessions().send_to_oneshot(sender)?,
     }
@@ -149,7 +158,7 @@ impl SessionSet {
   }
 
   #[tracing::instrument(skip_all)]
-  pub async fn run_session(lean_path: String, lean_server_log_dirpath: Option<String>) -> Result<(), Error> {
+  pub async fn run_session(lean_path: PathBuf, lean_server_log_dirpath: Option<PathBuf>) -> Result<(), Error> {
     let (session_set, session_set_client) = Self::new();
     let session_set_run_task = session_set.run().spawn_task();
 
