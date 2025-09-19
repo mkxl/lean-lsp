@@ -149,11 +149,9 @@ impl SessionSet {
         session_id_and_run_result = self.session_run_task_join_set.join_next() => match session_id_and_run_result {
           Some(Ok((session_id, session_run_result))) => self.cleanup_session(session_id, session_run_result),
           Some(Err(join_error)) => tracing::warn!(%join_error, "session run task failed to execute to completion"),
-          None => {},
+          None => tokio::task::yield_now().await,
         }
       }
-
-      tokio::task::yield_now().await;
     }
   }
 
