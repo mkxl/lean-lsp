@@ -1,18 +1,23 @@
 use std::{
+  borrow::Borrow,
   ffi::OsStr,
-  fmt::Display,
+  fmt::{Debug, Display},
+  io::Error as IoError,
   marker::Unpin,
   path::{Path, PathBuf},
   str::Utf8Error,
 };
 
 use anyhow::{Context, Error};
+use poem_openapi::payload::Json as PoemJson;
 use serde::Serialize;
 use serde_json::{Error as SerdeJsonError, Value as Json};
 use tokio::{io::AsyncReadExt, sync::oneshot::Sender as OneshotSender, task::JoinHandle};
 
+use crate::is::Is;
+
 pub trait Utils {
-  fn absolute(&self) -> Result<PathBuf, Error>
+  fn absolute(&self) -> Result<PathBuf, IoError>
   where
     Self: AsRef<Path>,
   {
@@ -33,11 +38,28 @@ pub trait Utils {
     std::format!("{self}{rhs}")
   }
 
+  fn convert<T: From<Self>>(self) -> T
+  where
+    Self: Sized,
+  {
+    self.into()
+  }
+
   fn file_name_ok(&self) -> Result<&OsStr, Error>
   where
     Self: AsRef<Path>,
   {
     self.as_ref().file_name().context("path has no file_name")
+  }
+
+  fn into_string(self) -> Result<String, Error>
+  where
+    Self: Is<PathBuf> + Sized,
+  {
+    match self.get().into_os_string().into_string() {
+      Ok(string) => string.ok(),
+      Err(os_string) => anyhow::bail!("{os_string:?} is not valid utf-8"),
+    }
   }
 
   fn json_byte_str(&self) -> Result<Vec<u8>, SerdeJsonError>
@@ -54,6 +76,34 @@ pub trait Utils {
     serde_json::to_value(self)
   }
 
+  fn log_error<T, C: Display, E: Debug + Display>(self, context: C) -> Self
+  where
+    Self: Borrow<Result<T, E>> + Sized,
+  {
+    if let Err(err) = self.borrow() {
+      tracing::warn!(?err, "{context}: {err}");
+    }
+
+    self
+  }
+
+  fn map_into<Y, X: Into<Y>>(self) -> Option<Y>
+  where
+    Self: Is<Option<X>> + Sized,
+  {
+    self.get().map(X::into)
+  }
+
+  fn map_as_ref<'a, Y: ?Sized, X: 'a + AsRef<Y>>(&'a self) -> Option<&'a Y>
+  where
+    Self: Borrow<Option<X>>,
+  {
+    match self.borrow() {
+      Some(x) => x.as_ref().some(),
+      None => None,
+    }
+  }
+
   fn ok<E>(self) -> Result<Self, E>
   where
     Self: Sized,
@@ -66,6 +116,13 @@ pub trait Utils {
     Self: Sized,
   {
     (self, rhs)
+  }
+
+  fn poem_json(self) -> PoemJson<Self>
+  where
+    Self: Sized,
+  {
+    PoemJson(self)
   }
 
   async fn read_string(&mut self) -> Result<String, Error>
@@ -123,7 +180,12 @@ pub trait Utils {
   where
     Self: AsRef<Path>,
   {
-    self.as_ref().to_str().context("path is not utf8")
+    let path = self.as_ref();
+
+    match path.to_str() {
+      Some(string) => string.ok(),
+      None => anyhow::bail!("{path:?} is not valid utf-8"),
+    }
   }
 
   fn to_uri(&self) -> Result<String, Error>
@@ -132,6 +194,8 @@ pub trait Utils {
   {
     "file://".cat(self.absolute()?.to_str_ok()?).ok()
   }
+
+  fn unit(&self) {}
 }
 
 impl<T: ?Sized> Utils for T {}

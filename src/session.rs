@@ -9,7 +9,7 @@ use tokio::{
   },
   task::JoinHandle,
 };
-use ulid::Ulid;
+use uuid::Uuid;
 
 use crate::{lean_server::LeanServer, utils::Utils};
 
@@ -19,10 +19,15 @@ pub enum SessionCommand {
 
 #[derive(Clone, Constructor)]
 pub struct SessionClient {
+  id: Uuid,
   sender: MpscSender<SessionCommand>,
 }
 
 impl SessionClient {
+  pub fn id(&self) -> Uuid {
+    self.id
+  }
+
   // TODO-8dffbb
   #[allow(dead_code)]
   pub async fn noop(&self) -> Result<(), Error> {
@@ -36,7 +41,7 @@ impl SessionClient {
 }
 
 pub struct Session {
-  id: Ulid,
+  id: Uuid,
   lean_server_run_task: JoinHandle<Result<(), Error>>,
   project_dirpath: PathBuf,
   receiver: MpscReceiver<SessionCommand>,
@@ -47,7 +52,7 @@ impl Session {
   const MANIFEST_FILE_NAME: &'static str = "lake-manifest.json";
 
   pub fn new(lean_path: &Path, lean_server_log_dirpath: Option<&Path>) -> Result<(Self, SessionClient), Error> {
-    let id = Ulid::new();
+    let id = Uuid::new_v4();
     let project_dirpath = Self::project_dirpath(lean_path)?;
     let lean_server_run_task = LeanServer::new(&project_dirpath, lean_server_log_dirpath)?
       .run()
@@ -59,14 +64,14 @@ impl Session {
       project_dirpath,
       receiver,
     };
-    let session_client = SessionClient::new(sender);
+    let session_client = SessionClient::new(id, sender);
 
     tracing::info!(id = %session.id, project_dirpath = %session.project_dirpath.display(), "new session");
 
     (session, session_client).ok()
   }
 
-  pub fn id(&self) -> Ulid {
+  pub fn id(&self) -> Uuid {
     self.id
   }
 
