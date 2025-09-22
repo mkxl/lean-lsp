@@ -115,7 +115,7 @@ impl SessionSet {
   #[tracing::instrument(skip_all)]
   async fn process_command(&mut self, command: SessionSetCommand) -> Result<(), Error> {
     match command {
-      SessionSetCommand::NewSession { sender, ref command } => self
+      SessionSetCommand::NewSession { sender, command } => self
         .new_session(command.lean_path.as_ref(), command.lean_server_log_dirpath.map_as_ref())
         .send_to_oneshot(sender)?,
       SessionSetCommand::GetSessions { sender } => self.get_sessions().send_to_oneshot(sender)?,
