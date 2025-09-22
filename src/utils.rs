@@ -58,7 +58,7 @@ pub trait Utils {
   {
     match self.get().into_os_string().into_string() {
       Ok(string) => string.ok(),
-      Err(os_string) => anyhow::bail!("{os_string:?} is not valid unicode"),
+      Err(os_string) => anyhow::bail!("{os_string:?} is not valid utf-8"),
     }
   }
 
@@ -87,18 +87,21 @@ pub trait Utils {
     self
   }
 
-  fn map_into<X, Y: From<X>>(self) -> Option<Y>
+  fn map_into<Y, X: Into<Y>>(self) -> Option<Y>
   where
     Self: Is<Option<X>> + Sized,
   {
-    self.get().map(Y::from)
+    self.get().map(X::into)
   }
 
-  fn map_as_ref<'a, Y: ?Sized, X: 'a + AsRef<Y> + ?Sized>(self) -> Option<&'a Y>
+  fn map_as_ref<'a, Y: ?Sized, X: 'a + AsRef<Y>>(&'a self) -> Option<&'a Y>
   where
-    Self: Is<Option<&'a X>> + Sized,
+    Self: Borrow<Option<X>>,
   {
-    self.get().map(X::as_ref)
+    match self.borrow() {
+      Some(x) => x.as_ref().some(),
+      None => None,
+    }
   }
 
   fn ok<E>(self) -> Result<Self, E>
@@ -173,11 +176,23 @@ pub trait Utils {
     (begin, end).some()
   }
 
+  fn to_str_ok(&self) -> Result<&str, Error>
+  where
+    Self: AsRef<Path>,
+  {
+    let path = self.as_ref();
+
+    match path.to_str() {
+      Some(string) => string.ok(),
+      None => anyhow::bail!("{path:?} is not valid utf-8"),
+    }
+  }
+
   fn to_uri(&self) -> Result<String, Error>
   where
     Self: AsRef<Path>,
   {
-    "file://".cat(self.absolute()?.display()).ok()
+    "file://".cat(self.absolute()?.to_str_ok()?).ok()
   }
 
   fn unit(&self) {}
