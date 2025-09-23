@@ -5,6 +5,7 @@ use std::{
 
 use anyhow::Error;
 use derive_more::Constructor;
+use mkutils::Utils;
 use poem_openapi::Object;
 use tokio::{
   sync::{
@@ -15,10 +16,7 @@ use tokio::{
 };
 use ulid::Ulid;
 
-use crate::{
-  session::{Session, SessionClient},
-  utils::Utils,
-};
+use crate::session::{Session, SessionClient};
 
 // NOTE: use [String] over [PathBuf] because TODO
 #[derive(Constructor, Object)]

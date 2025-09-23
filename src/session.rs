@@ -2,6 +2,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::Error;
 use derive_more::Constructor;
+use mkutils::Utils;
 use tokio::{
   sync::{
     mpsc::{Receiver as MpscReceiver, Sender as MpscSender},
@@ -11,7 +12,7 @@ use tokio::{
 };
 use ulid::Ulid;
 
-use crate::{lean_server::LeanServer, utils::Utils};
+use crate::lean_server::LeanServer;
 
 pub enum SessionCommand {
   Noop { sender: OneshotSender<()> },
