@@ -7,19 +7,19 @@ use crate::{
 };
 
 pub struct Client {
-  http: ReqwestClient,
+  http_client: ReqwestClient,
   port: u16,
 }
 
 impl Client {
   pub fn new(port: u16) -> Result<Self, Error> {
-    let http = Self::http()?;
-    let client = Self { http, port };
+    let http_client = Self::http_client()?;
+    let client = Self { http_client, port };
 
     client.ok()
   }
 
-  fn http() -> Result<ReqwestClient, Error> {
+  fn http_client() -> Result<ReqwestClient, Error> {
     ReqwestClient::builder().http2_prior_knowledge().build()?.ok()
   }
 
@@ -31,7 +31,7 @@ impl Client {
     let url = self.url(Server::GET_SESSIONS_PATH);
 
     self
-      .http
+      .http_client
       .get(url)
       .send()
       .await?
