@@ -13,7 +13,7 @@ use tokio::{
   },
   task::JoinSet,
 };
-use uuid::Uuid;
+use ulid::Ulid;
 
 use crate::{
   session::{Session, SessionClient},
@@ -75,8 +75,8 @@ impl SessionSetClient {
 
 pub struct SessionSet {
   receiver: MpscReceiver<SessionSetCommand>,
-  session_clients: HashMap<Uuid, SessionClient>,
-  session_run_task_join_set: JoinSet<(Uuid, Result<(), Error>)>,
+  session_clients: HashMap<Ulid, SessionClient>,
+  session_run_task_join_set: JoinSet<(Ulid, Result<(), Error>)>,
 }
 
 impl SessionSet {
@@ -124,7 +124,7 @@ impl SessionSet {
     ().ok()
   }
 
-  fn cleanup_session(&mut self, session_id: Uuid, result: Result<(), Error>) {
+  fn cleanup_session(&mut self, session_id: Ulid, result: Result<(), Error>) {
     self.session_clients.remove(&session_id);
 
     if let Err(session_error) = result {

@@ -1,6 +1,7 @@
 #![recursion_limit = "256"]
 
 mod cli_args;
+mod client;
 mod is;
 mod lean_server;
 mod messages;
