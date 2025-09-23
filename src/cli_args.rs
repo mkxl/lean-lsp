@@ -7,7 +7,7 @@ use tracing_subscriber::{
   Layer, filter::LevelFilter, fmt::format::FmtSpan, layer::SubscriberExt, util::SubscriberInitExt,
 };
 
-use crate::{lean_server::LeanServer, server::Server, session_set::SessionSet};
+use crate::{client::Client, lean_server::LeanServer, server::Server, session_set::SessionSet, utils::Utils};
 
 #[derive(Args)]
 struct Get {
@@ -17,7 +17,13 @@ struct Get {
 
 impl Get {
   async fn run(self) -> Result<(), Error> {
-    std::future::pending().await
+    Client::new(self.port)?
+      .get()
+      .await?
+      .session_ids
+      .iter()
+      .for_each(Utils::println)
+      .ok()
   }
 }
 

@@ -2,9 +2,12 @@ use std::net::Ipv4Addr;
 
 use anyhow::Error;
 use derive_more::From;
-use poem::{EndpointExt, Error as PoemError, Route, Server as PoemServer, listener::TcpListener, middleware::Tracing};
+use poem::{
+  Endpoint, EndpointExt, Error as PoemError, Route, Server as PoemServer, listener::TcpListener, middleware::Tracing,
+};
 use poem_openapi::{Object, OpenApi, OpenApiService, payload::Json};
-use uuid::Uuid;
+use serde::Deserialize;
+use ulid::Ulid;
 
 use crate::{
   session::SessionClient,
@@ -14,12 +17,12 @@ use crate::{
 
 #[derive(From, Object)]
 pub struct NewSessionResult {
-  pub session_id: Uuid,
+  pub session_id: Ulid,
 }
 
-#[derive(From, Object)]
+#[derive(Deserialize, From, Object)]
 pub struct GetSessionsResult {
-  pub session_ids: Vec<Uuid>,
+  pub session_ids: Vec<Ulid>,
 }
 
 pub struct Server {
@@ -28,10 +31,12 @@ pub struct Server {
 
 #[OpenApi]
 impl Server {
+  pub const GET_SESSIONS_PATH: &'static str = "/session";
   pub const DEFAULT_PORT: u16 = 8080;
+  pub const IPV4_ADDR: Ipv4Addr = Ipv4Addr::UNSPECIFIED;
 
-  const IPV4_ADDR: Ipv4Addr = Ipv4Addr::UNSPECIFIED;
   const ROOT_PATH: &'static str = "/";
+  const OPEN_API_PATH: &'static str = "/openapi";
   const TITLE: &'static str = std::env!("CARGO_PKG_NAME");
   const VERSION: &'static str = std::env!("CARGO_PKG_VERSION");
 
@@ -55,7 +60,7 @@ impl Server {
       .await?
       .iter()
       .map(SessionClient::id)
-      .collect::<Vec<Uuid>>()
+      .collect::<Vec<Ulid>>()
       .convert::<GetSessionsResult>()
       .poem_json()
       .ok()
@@ -73,10 +78,21 @@ impl Server {
       .ok()
   }
 
+  fn open_api_endpoint(open_api_service: &OpenApiService<Self, ()>) -> impl Endpoint<Output = String> + use<> {
+    let spec_yaml = open_api_service.spec_yaml();
+    let func = move |_request| spec_yaml.clone();
+
+    poem::endpoint::make_sync(func)
+  }
+
   pub async fn serve(port: u16) -> Result<(), Error> {
     let listener = TcpListener::bind((Self::IPV4_ADDR, port));
     let open_api_service = OpenApiService::new(Self::new(), Self::TITLE, Self::VERSION);
-    let endpoint = Route::new().nest(Self::ROOT_PATH, open_api_service).with(Tracing);
+    let open_api_endpoint = Self::open_api_endpoint(&open_api_service);
+    let endpoint = Route::new()
+      .nest(Self::ROOT_PATH, open_api_service)
+      .nest(Self::OPEN_API_PATH, open_api_endpoint)
+      .with(Tracing);
 
     PoemServer::new(listener).run(endpoint).await?;
 

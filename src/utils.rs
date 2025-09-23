@@ -10,6 +10,7 @@ use std::{
 
 use anyhow::{Context, Error};
 use poem_openapi::payload::Json as PoemJson;
+use reqwest::Response;
 use serde::Serialize;
 use serde_json::{Error as SerdeJsonError, Value as Json};
 use tokio::{io::AsyncReadExt, sync::oneshot::Sender as OneshotSender, task::JoinHandle};
@@ -36,6 +37,26 @@ pub trait Utils {
     Self: Display,
   {
     std::format!("{self}{rhs}")
+  }
+
+  // NOTE: [https://docs.rs/reqwest/latest/reqwest/struct.Response.html#method.error_for_status]
+  async fn check_status(self) -> Result<Response, Error>
+  where
+    Self: Into<Response>,
+  {
+    let response = self.into();
+    let status = response.status();
+
+    if !status.is_client_error() && !status.is_server_error() {
+      return response.ok();
+    }
+
+    let text = match response.text().await {
+      Ok(text) => text,
+      Err(error) => std::format!("unable to read response text: {error}"),
+    };
+
+    anyhow::bail!("({status}) {text}")
   }
 
   fn convert<T: From<Self>>(self) -> T
@@ -123,6 +144,13 @@ pub trait Utils {
     Self: Sized,
   {
     PoemJson(self)
+  }
+
+  fn println(&self)
+  where
+    Self: Display,
+  {
+    std::println!("{self}");
   }
 
   async fn read_string(&mut self) -> Result<String, Error>
