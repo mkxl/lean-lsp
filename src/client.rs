@@ -1,10 +1,8 @@
 use anyhow::Error;
+use mkutils::Utils;
 use reqwest::Client as ReqwestClient;
 
-use crate::{
-  server::{GetSessionsResult, Server},
-  utils::Utils,
-};
+use crate::server::{GetSessionsResult, Server};
 
 pub struct Client {
   http_client: ReqwestClient,

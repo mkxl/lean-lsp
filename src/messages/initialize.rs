@@ -1,9 +1,8 @@
 use std::path::Path;
 
 use anyhow::Error;
+use mkutils::Utils;
 use serde_json::Value as Json;
-
-use crate::utils::Utils;
 
 #[allow(clippy::too_many_lines)]
 pub fn json(root_path: &Path, process_id: u32) -> Result<Json, Error> {

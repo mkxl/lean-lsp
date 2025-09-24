@@ -2,12 +2,13 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Error};
 use bytes::{Buf, BytesMut};
+use mkutils::Utils;
 use serde::Serialize;
 use serde_json::Value as Json;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use valuable::Valuable;
 
-use crate::{process::Process, utils::Utils};
+use crate::process::Process;
 
 pub struct LeanServer {
   project_dirpath: PathBuf,

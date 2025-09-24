@@ -4,18 +4,18 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-anyhow = "1.0.99"
-auto-context = "0.1.1"
+anyhow = "1.0.100"
 bytes = "1.10.1"
-clap = { version = "4.5.46", features = ["derive", "env"] }
+clap = { version = "4.5.48", features = ["derive", "env"] }
 console-subscriber = "0.4.1"
 derive_more = { version = "2.0.1", features = ["constructor", "from"] }
+mkutils = { git = "https://github.com/mkxl/mkutils-rs", rev = "1ca7d6a586a1174390a8492abf4e67bc641d080b", version = "0.1.0" }
 poem = { git = "https://github.com/0xb002f0/poem", version = "3.1.12", features = ["anyhow", "websocket"], branch = "0xb002f0/ulid" }
 poem-openapi = { git = "https://github.com/0xb002f0/poem", version = "5.1.16", features = ["ulid", "websocket"], branch = "0xb002f0/ulid" }
 reqwest = { version = "0.12.23", features = ["json"] }
-serde = { version = "1.0.219", features = ["derive"] }
+serde = { version = "1.0.226", features = ["derive"] }
 serde_json = { git = "https://github.com/mkxl/serde-json", version = "1.0.144" }
-tokio = { version = "1.47.1", features = ["macros", "process", "rt-multi-thread"] }
+tokio = { version = "1.47.1", features = ["macros", "rt-multi-thread", "process"] }
 tracing = { version = "0.1.41", features = ["valuable"] }
 tracing-subscriber = { version = "0.3.20", features = ["json", "valuable"] }
 ulid = { version = "1.2.1", features = ["serde"] }

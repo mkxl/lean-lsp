@@ -3,11 +3,12 @@ use std::{io::StdoutLock, net::IpAddr, path::PathBuf};
 use anyhow::Error;
 use clap::{Args, Parser, Subcommand};
 use console_subscriber::{ConsoleLayer, Server as ConsoleServer};
+use mkutils::Utils;
 use tracing_subscriber::{
   Layer, filter::LevelFilter, fmt::format::FmtSpan, layer::SubscriberExt, util::SubscriberInitExt,
 };
 
-use crate::{client::Client, lean_server::LeanServer, server::Server, session_set::SessionSet, utils::Utils};
+use crate::{client::Client, lean_server::LeanServer, server::Server, session_set::SessionSet};
 
 #[derive(Args)]
 struct Get {
