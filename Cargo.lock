@@ -1187,7 +1187,7 @@ dependencies = [
 [[package]]
 name = "mkutils"
 version = "0.1.0"
-source = "git+https://github.com/mkxl/mkutils-rs?rev=1ca7d6a586a1174390a8492abf4e67bc641d080b#1ca7d6a586a1174390a8492abf4e67bc641d080b"
+source = "git+https://github.com/mkxl/mkutils-rs?rev=7b35a2bda0d0569b28a8ef6dc5f8c1d7bc93bca1#7b35a2bda0d0569b28a8ef6dc5f8c1d7bc93bca1"
 dependencies = [
  "anyhow",
  "console-subscriber",
@@ -1199,6 +1199,7 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber",
+ "url",
 ]
 
 [[package]]
@@ -1411,7 +1412,7 @@ checksum = "7edddbd0b52d732b21ad9a5fab5c704c14cd949e5e9a1ec5929a24fded1b904c"
 [[package]]
 name = "poem"
 version = "3.1.12"
-source = "git+https://github.com/0xb002f0/poem?branch=0xb002f0%2Fulid#7da9d444ac4d97184df5796435ae1649dd8b5203"
+source = "git+https://github.com/0xb002f0/poem?rev=70ee9a70f335c5961f12e290706fc89ddb1f54e7#70ee9a70f335c5961f12e290706fc89ddb1f54e7"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
@@ -1451,7 +1452,7 @@ dependencies = [
 [[package]]
 name = "poem-derive"
 version = "3.1.12"
-source = "git+https://github.com/0xb002f0/poem?branch=0xb002f0%2Fulid#7da9d444ac4d97184df5796435ae1649dd8b5203"
+source = "git+https://github.com/0xb002f0/poem?rev=70ee9a70f335c5961f12e290706fc89ddb1f54e7#70ee9a70f335c5961f12e290706fc89ddb1f54e7"
 dependencies = [
  "proc-macro-crate",
  "proc-macro2",
@@ -1462,7 +1463,7 @@ dependencies = [
 [[package]]
 name = "poem-openapi"
 version = "5.1.16"
-source = "git+https://github.com/0xb002f0/poem?branch=0xb002f0%2Fulid#7da9d444ac4d97184df5796435ae1649dd8b5203"
+source = "git+https://github.com/0xb002f0/poem?rev=70ee9a70f335c5961f12e290706fc89ddb1f54e7#70ee9a70f335c5961f12e290706fc89ddb1f54e7"
 dependencies = [
  "base64 0.22.1",
  "bytes",
@@ -1488,7 +1489,7 @@ dependencies = [
 [[package]]
 name = "poem-openapi-derive"
 version = "5.1.16"
-source = "git+https://github.com/0xb002f0/poem?branch=0xb002f0%2Fulid#7da9d444ac4d97184df5796435ae1649dd8b5203"
+source = "git+https://github.com/0xb002f0/poem?rev=70ee9a70f335c5961f12e290706fc89ddb1f54e7#70ee9a70f335c5961f12e290706fc89ddb1f54e7"
 dependencies = [
  "darling",
  "http",

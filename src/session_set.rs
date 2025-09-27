@@ -18,11 +18,10 @@ use ulid::Ulid;
 
 use crate::session::{Session, SessionClient};
 
-// NOTE: use [String] over [PathBuf] because TODO
 #[derive(Constructor, Object)]
 pub struct NewSessionCommand {
-  pub lean_path: String,
-  pub lean_server_log_dirpath: Option<String>,
+  pub lean_path: PathBuf,
+  pub lean_server_log_dirpath: Option<PathBuf>,
 }
 
 pub enum SessionSetCommand {
@@ -49,10 +48,7 @@ impl SessionSetClient {
     lean_server_log_dirpath: Option<PathBuf>,
   ) -> Result<SessionClient, Error> {
     let (sender, receiver) = tokio::sync::oneshot::channel();
-    let command = NewSessionCommand::new(
-      lean_path.into_string()?,
-      lean_server_log_dirpath.map(PathBuf::into_string).transpose()?,
-    );
+    let command = NewSessionCommand::new(lean_path, lean_server_log_dirpath);
     let new_session_command = SessionSetCommand::NewSession { sender, command };
 
     self.sender.send(new_session_command).await?;

@@ -9,9 +9,9 @@ bytes = "1.10.1"
 clap = { version = "4.5.48", features = ["derive", "env"] }
 console-subscriber = "0.4.1"
 derive_more = { version = "2.0.1", features = ["constructor", "from"] }
-mkutils = { git = "https://github.com/mkxl/mkutils-rs", rev = "1ca7d6a586a1174390a8492abf4e67bc641d080b", version = "0.1.0" }
-poem = { git = "https://github.com/0xb002f0/poem", version = "3.1.12", features = ["anyhow", "websocket"], branch = "0xb002f0/ulid" }
-poem-openapi = { git = "https://github.com/0xb002f0/poem", version = "5.1.16", features = ["ulid", "websocket"], branch = "0xb002f0/ulid" }
+mkutils = { git = "https://github.com/mkxl/mkutils-rs", rev = "7b35a2bda0d0569b28a8ef6dc5f8c1d7bc93bca1", version = "0.1.0" }
+poem = { git = "https://github.com/0xb002f0/poem", version = "3.1.12", features = ["anyhow", "websocket"], rev = "70ee9a70f335c5961f12e290706fc89ddb1f54e7" }
+poem-openapi = { git = "https://github.com/0xb002f0/poem", version = "5.1.16", features = ["ulid", "websocket"], rev = "70ee9a70f335c5961f12e290706fc89ddb1f54e7" }
 reqwest = { version = "0.12.23", features = ["json"] }
 serde = { version = "1.0.226", features = ["derive"] }
 serde_json = { git = "https://github.com/mkxl/serde-json", version = "1.0.144" }
