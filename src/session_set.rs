@@ -5,15 +5,13 @@ use std::{
 
 use anyhow::Error;
 use derive_more::Constructor;
-use mkutils::Utils;
+use mkutils::{IntoStream, Utils};
 use poem_openapi::Object;
 use tokio::{
-  sync::{
-    mpsc::{Receiver as MpscReceiver, Sender as MpscSender},
-    oneshot::Sender as OneshotSender,
-  },
+  sync::{mpsc::UnboundedSender as UnboundedMpscSender, oneshot::Sender as OneshotSender},
   task::JoinSet,
 };
+use tokio_stream::wrappers::UnboundedReceiverStream as UnboundedMpscReceiverStream;
 use ulid::Ulid;
 
 use crate::session::{Session, SessionClient};
@@ -36,7 +34,7 @@ pub enum SessionSetCommand {
 
 #[derive(Constructor)]
 pub struct SessionSetClient {
-  sender: MpscSender<SessionSetCommand>,
+  sender: UnboundedMpscSender<SessionSetCommand>,
 }
 
 impl SessionSetClient {
@@ -51,7 +49,7 @@ impl SessionSetClient {
     let command = NewSessionCommand::new(lean_path, lean_server_log_dirpath);
     let new_session_command = SessionSetCommand::NewSession { sender, command };
 
-    self.sender.send(new_session_command).await?;
+    self.sender.send(new_session_command)?;
 
     receiver.await?
   }
@@ -61,27 +59,26 @@ impl SessionSetClient {
     let (sender, receiver) = tokio::sync::oneshot::channel();
     let get_sessions = SessionSetCommand::GetSessions { sender };
 
-    self.sender.send(get_sessions).await?;
+    self.sender.send(get_sessions)?;
 
     receiver.await?.ok()
   }
 }
 
 pub struct SessionSet {
-  receiver: MpscReceiver<SessionSetCommand>,
+  commands: UnboundedMpscReceiverStream<SessionSetCommand>,
   session_clients: HashMap<Ulid, SessionClient>,
   session_run_task_join_set: JoinSet<(Ulid, Result<(), Error>)>,
 }
 
 impl SessionSet {
-  const COMMAND_CHANNEL_BUFFER_SIZE: usize = 64;
-
   pub fn new() -> (Self, SessionSetClient) {
-    let (sender, receiver) = tokio::sync::mpsc::channel(Self::COMMAND_CHANNEL_BUFFER_SIZE);
+    let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();
+    let commands = receiver.into_stream();
     let session_clients = HashMap::new();
     let session_run_task_join_set = JoinSet::new();
     let session_set = Self {
-      receiver,
+      commands,
       session_clients,
       session_run_task_join_set,
     };
@@ -133,10 +130,7 @@ impl SessionSet {
   pub async fn run(mut self) -> Result<(), Error> {
     loop {
       tokio::select! {
-        session_set_command_opt = self.receiver.recv() => match session_set_command_opt {
-          Some(command) => self.process_command(command).await.log_error("error processing command").unit(),
-          None => return tracing::info!("session set client has been dropped, ending session set run loop...").ok(),
-        },
+        session_set_command_res = self.commands.next_item() => self.process_command(session_set_command_res?).await.log_error("error processing command").unit(),
         session_id_and_run_result = self.session_run_task_join_set.join_next() => match session_id_and_run_result {
           Some(Ok((session_id, session_run_result))) => self.cleanup_session(session_id, session_run_result),
           Some(Err(join_error)) => tracing::warn!(%join_error, "session run task failed to execute to completion"),
