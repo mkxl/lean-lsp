@@ -1,8 +1,12 @@
 use anyhow::Error;
 use mkutils::Utils;
 use reqwest::Client as ReqwestClient;
+use ulid::Ulid;
 
-use crate::server::{GetSessionsResult, Server};
+use crate::{
+  server::{GetSessionsResult, NewSessionResult, Server},
+  session_set::{NewSessionCommand, OpenFileCommand},
+};
 
 pub struct Client {
   http_client: ReqwestClient,
@@ -25,12 +29,45 @@ impl Client {
     std::format!("http://{url}:{port}{path}", url = Server::IPV4_ADDR, port = self.port)
   }
 
-  pub async fn get(&self) -> Result<GetSessionsResult, Error> {
-    let url = self.url(Server::GET_SESSIONS_PATH);
+  pub async fn new_session(&self, command: &NewSessionCommand) -> Result<NewSessionResult, Error> {
+    let url = self.url(Server::PATH_NEW_SESSION);
+
+    self
+      .http_client
+      .post(url)
+      .json(command)
+      .send()
+      .await?
+      .check_status()
+      .await?
+      .json::<NewSessionResult>()
+      .await?
+      .ok()
+  }
+
+  pub async fn open_file(&self, command: &OpenFileCommand) -> Result<(), Error> {
+    let url = self.url(Server::PATH_OPEN_FILE);
+
+    self
+      .http_client
+      .post(url)
+      .json(command)
+      .send()
+      .await?
+      .check_status()
+      .await?
+      .json::<()>()
+      .await?
+      .ok()
+  }
+
+  pub async fn get(&self, session_id: Option<Ulid>) -> Result<GetSessionsResult, Error> {
+    let url = self.url(Server::PATH_GET_SESSIONS);
 
     self
       .http_client
       .get(url)
+      .query_once(Server::SESSION_QUERY_PARAM_NAME, session_id)
       .send()
       .await?
       .check_status()

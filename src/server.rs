@@ -6,16 +6,16 @@ use mkutils::Utils;
 use poem::{
   Endpoint, EndpointExt, Error as PoemError, Route, Server as PoemServer, listener::TcpListener, middleware::Tracing,
 };
-use poem_openapi::{Object, OpenApi, OpenApiService, payload::Json};
-use serde::Deserialize;
+use poem_openapi::{Object, OpenApi, OpenApiService, param::Query, payload::Json};
+use serde::{Deserialize, Serialize};
 use ulid::Ulid;
 
 use crate::{
   session::SessionClient,
-  session_set::{NewSessionCommand, SessionSet, SessionSetClient},
+  session_set::{NewSessionCommand, OpenFileCommand, SessionSet, SessionSetClient},
 };
 
-#[derive(From, Object)]
+#[derive(From, Deserialize, Object, Serialize)]
 pub struct NewSessionResult {
   pub session_id: Ulid,
 }
@@ -31,12 +31,15 @@ pub struct Server {
 
 #[OpenApi]
 impl Server {
-  pub const GET_SESSIONS_PATH: &'static str = "/session";
+  pub const PATH_GET_SESSIONS: &'static str = "/session";
+  pub const PATH_NEW_SESSION: &'static str = "/session/new";
+  pub const PATH_OPEN_FILE: &'static str = "/session/open";
   pub const DEFAULT_PORT: u16 = 8080;
   pub const IPV4_ADDR: Ipv4Addr = Ipv4Addr::UNSPECIFIED;
+  pub const SESSION_QUERY_PARAM_NAME: &'static str = "session_id";
 
-  const ROOT_PATH: &'static str = "/";
-  const OPEN_API_PATH: &'static str = "/openapi";
+  const PATH_ROOT: &'static str = "/";
+  const PATH_OPEN_API: &'static str = "/openapi";
   const TITLE: &'static str = std::env!("CARGO_PKG_NAME");
   const VERSION: &'static str = std::env!("CARGO_PKG_VERSION");
 
@@ -53,15 +56,36 @@ impl Server {
   }
 
   #[oai(path = "/session", method = "get")]
-  async fn get_sessions(&self) -> Result<Json<GetSessionsResult>, PoemError> {
-    self
-      .session_set_client
-      .get_sessions()
-      .await?
+  async fn get_sessions(&self, Query(session_id): Query<Option<Ulid>>) -> Result<Json<GetSessionsResult>, PoemError> {
+    let session_clients = if session_id.is_some() {
+      self
+        .session_set_client
+        .get_session_client(session_id)
+        .await?
+        .once()
+        .collect()
+    } else {
+      self.session_set_client.get_session_clients().await?
+    };
+
+    session_clients
       .iter()
       .map(SessionClient::id)
       .collect::<Vec<Ulid>>()
+      .log("session client ids")
       .convert::<GetSessionsResult>()
+      .poem_json()
+      .ok()
+  }
+
+  #[oai(path = "/session/open", method = "post")]
+  async fn open_file(&self, Json(command): Json<OpenFileCommand>) -> Result<Json<()>, PoemError> {
+    self
+      .session_set_client
+      .get_session_client(command.session_id)
+      .await?
+      .open_file(command.lean_filepath)
+      .await?
       .poem_json()
       .ok()
   }
@@ -90,8 +114,8 @@ impl Server {
     let open_api_service = OpenApiService::new(Self::new(), Self::TITLE, Self::VERSION);
     let open_api_endpoint = Self::open_api_endpoint(&open_api_service);
     let endpoint = Route::new()
-      .nest(Self::ROOT_PATH, open_api_service)
-      .nest(Self::OPEN_API_PATH, open_api_endpoint)
+      .nest(Self::PATH_ROOT, open_api_service)
+      .nest(Self::PATH_OPEN_API, open_api_endpoint)
       .with(Tracing);
 
     PoemServer::new(listener).run(endpoint).await?;

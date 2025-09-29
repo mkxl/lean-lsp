@@ -4,9 +4,11 @@ use std::{
 };
 
 use anyhow::Error;
+use clap::Args;
 use derive_more::Constructor;
 use mkutils::Utils;
 use poem_openapi::Object;
+use serde::{Deserialize, Serialize};
 use tokio::{
   sync::{
     mpsc::{Receiver as MpscReceiver, Sender as MpscSender},
@@ -16,12 +18,35 @@ use tokio::{
 };
 use ulid::Ulid;
 
-use crate::session::{Session, SessionClient};
+use crate::{
+  lean_server::LeanServer,
+  session::{Session, SessionClient},
+};
 
-#[derive(Constructor, Object)]
+#[derive(Args, Constructor, Deserialize, Object, Serialize)]
 pub struct NewSessionCommand {
+  #[arg(default_value = Self::DEFAULT_LEAN_PATH_STR)]
   pub lean_path: PathBuf,
+
+  #[arg(long = "log-dir", env = Self::LEAN_SERVER_LOG_DIRPATH_ENV_NAME)]
   pub lean_server_log_dirpath: Option<PathBuf>,
+}
+
+impl NewSessionCommand {
+  const DEFAULT_LEAN_PATH_STR: &'static str = ".";
+  const LEAN_SERVER_LOG_DIRPATH_ENV_NAME: &'static str = LeanServer::LOG_DIRPATH_ENV_NAME;
+
+  pub async fn run(self) -> Result<(), Error> {
+    SessionSet::run_session(self.lean_path, self.lean_server_log_dirpath).await
+  }
+}
+
+#[derive(Args, Constructor, Deserialize, Object, Serialize)]
+pub struct OpenFileCommand {
+  #[arg(long)]
+  pub session_id: Option<Ulid>,
+
+  pub lean_filepath: PathBuf,
 }
 
 pub enum SessionSetCommand {
@@ -29,8 +54,12 @@ pub enum SessionSetCommand {
     sender: OneshotSender<Result<SessionClient, Error>>,
     command: NewSessionCommand,
   },
-  GetSessions {
+  GetSessionClients {
     sender: OneshotSender<Vec<SessionClient>>,
+  },
+  GetSessionClient {
+    sender: OneshotSender<Result<SessionClient, Error>>,
+    session_id: Option<Ulid>,
   },
 }
 
@@ -57,13 +86,23 @@ impl SessionSetClient {
   }
 
   // TODO-8dffbb
-  pub async fn get_sessions(&self) -> Result<Vec<SessionClient>, Error> {
+  pub async fn get_session_clients(&self) -> Result<Vec<SessionClient>, Error> {
     let (sender, receiver) = tokio::sync::oneshot::channel();
-    let get_sessions = SessionSetCommand::GetSessions { sender };
+    let get_session_clients = SessionSetCommand::GetSessionClients { sender };
 
-    self.sender.send(get_sessions).await?;
+    self.sender.send(get_session_clients).await?;
 
     receiver.await?.ok()
+  }
+
+  // TODO-8dffbb
+  pub async fn get_session_client(&self, session_id: Option<Ulid>) -> Result<SessionClient, Error> {
+    let (sender, receiver) = tokio::sync::oneshot::channel();
+    let get_session_client = SessionSetCommand::GetSessionClient { sender, session_id };
+
+    self.sender.send(get_session_client).await?;
+
+    receiver.await?
   }
 }
 
@@ -101,8 +140,18 @@ impl SessionSet {
     session_client.ok()
   }
 
-  fn get_sessions(&self) -> Vec<SessionClient> {
+  fn get_session_clients(&self) -> Vec<SessionClient> {
     self.session_clients.values().cloned().collect()
+  }
+
+  fn get_session_client(&self, session_id: Option<Ulid>) -> Result<SessionClient, Error> {
+    if let Some(session_id) = session_id {
+      self.session_clients.try_get(&session_id)?.clone().ok()
+    } else if self.session_clients.len() == 1 {
+      self.session_clients.values().next_item()?.clone().ok()
+    } else {
+      anyhow::bail!("unspecified session id is ambiguous")
+    }
   }
 
   #[allow(clippy::unused_async)]
@@ -112,7 +161,10 @@ impl SessionSet {
       SessionSetCommand::NewSession { sender, command } => self
         .new_session(command.lean_path.as_ref(), command.lean_server_log_dirpath.map_as_ref())
         .send_to_oneshot(sender)?,
-      SessionSetCommand::GetSessions { sender } => self.get_sessions().send_to_oneshot(sender)?,
+      SessionSetCommand::GetSessionClients { sender } => self.get_session_clients().send_to_oneshot(sender)?,
+      SessionSetCommand::GetSessionClient { sender, session_id } => {
+        self.get_session_client(session_id).send_to_oneshot(sender)?;
+      }
     }
 
     ().ok()
