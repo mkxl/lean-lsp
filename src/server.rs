@@ -3,9 +3,7 @@ use std::net::Ipv4Addr;
 use anyhow::Error;
 use derive_more::From;
 use mkutils::Utils;
-use poem::{
-  Endpoint, EndpointExt, Error as PoemError, Route, Server as PoemServer, listener::TcpListener, middleware::Tracing,
-};
+use poem::{EndpointExt, Error as PoemError, Route, Server as PoemServer, listener::TcpListener, middleware::Tracing};
 use poem_openapi::{Object, OpenApi, OpenApiService, param::Query, payload::Json};
 use serde::{Deserialize, Serialize};
 use ulid::Ulid;
@@ -102,17 +100,10 @@ impl Server {
       .ok()
   }
 
-  fn open_api_endpoint(open_api_service: &OpenApiService<Self, ()>) -> impl Endpoint<Output = String> + use<> {
-    let spec_yaml = open_api_service.spec_yaml();
-    let func = move |_request| spec_yaml.clone();
-
-    poem::endpoint::make_sync(func)
-  }
-
   pub async fn serve(port: u16) -> Result<(), Error> {
     let listener = TcpListener::bind((Self::IPV4_ADDR, port));
     let open_api_service = OpenApiService::new(Self::new(), Self::TITLE, Self::VERSION);
-    let open_api_endpoint = Self::open_api_endpoint(&open_api_service);
+    let open_api_endpoint = open_api_service.spec_yaml().into_endpoint();
     let endpoint = Route::new()
       .nest(Self::PATH_ROOT, open_api_service)
       .nest(Self::PATH_OPEN_API, open_api_endpoint)

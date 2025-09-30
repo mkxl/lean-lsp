@@ -2,14 +2,12 @@ use std::path::{Path, PathBuf};
 
 use anyhow::Error;
 use derive_more::Constructor;
-use mkutils::Utils;
+use mkutils::{IntoStream, Utils};
 use tokio::{
-  sync::{
-    mpsc::{Receiver as MpscReceiver, Sender as MpscSender},
-    oneshot::Sender as OneshotSender,
-  },
+  sync::{mpsc::UnboundedSender as UnboundedMpscSender, oneshot::Sender as OneshotSender},
   task::JoinHandle,
 };
+use tokio_stream::wrappers::UnboundedReceiverStream as UnboundedMpscReceiverStream;
 use ulid::Ulid;
 
 use crate::lean_server::LeanServer;
@@ -24,7 +22,7 @@ pub enum SessionCommand {
 #[derive(Clone, Constructor)]
 pub struct SessionClient {
   id: Ulid,
-  sender: MpscSender<SessionCommand>,
+  sender: UnboundedMpscSender<SessionCommand>,
 }
 
 impl SessionClient {
@@ -37,7 +35,7 @@ impl SessionClient {
     let (sender, receiver) = tokio::sync::oneshot::channel();
     let open_file_command = SessionCommand::OpenFile { sender, filepath };
 
-    self.sender.send(open_file_command).await?;
+    self.sender.send(open_file_command)?;
 
     receiver.await?.ok()
   }
@@ -47,11 +45,10 @@ pub struct Session {
   id: Ulid,
   lean_server_run_task: JoinHandle<Result<(), Error>>,
   project_dirpath: PathBuf,
-  receiver: MpscReceiver<SessionCommand>,
+  commands: UnboundedMpscReceiverStream<SessionCommand>,
 }
 
 impl Session {
-  const COMMAND_CHANNEL_BUFFER_SIZE: usize = 64;
   const MANIFEST_FILE_NAME: &'static str = "lake-manifest.json";
 
   pub fn new(lean_path: &Path, lean_server_log_dirpath: Option<&Path>) -> Result<(Self, SessionClient), Error> {
@@ -60,12 +57,13 @@ impl Session {
     let lean_server_run_task = LeanServer::new(&project_dirpath, lean_server_log_dirpath)?
       .run()
       .spawn_task();
-    let (sender, receiver) = tokio::sync::mpsc::channel(Self::COMMAND_CHANNEL_BUFFER_SIZE);
+    let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();
+    let commands = receiver.into_stream();
     let session = Self {
       id,
       lean_server_run_task,
       project_dirpath,
-      receiver,
+      commands,
     };
     let session_client = SessionClient::new(id, sender);
 
@@ -107,10 +105,7 @@ impl Session {
   pub async fn run(mut self) -> Result<(), Error> {
     loop {
       tokio::select! {
-        session_command_opt = self.receiver.recv() => match session_command_opt {
-          Some(session_command) => self.process_command(session_command).await?,
-          None => return tracing::info!("session client has been dropped, ending session run loop...").ok()
-        },
+        session_command_res = self.commands.next_item_async() => self.process_command(session_command_res?).await?,
         result = &mut self.lean_server_run_task => result??,
       }
     }
