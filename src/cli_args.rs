@@ -1,4 +1,4 @@
-use std::{io::StdoutLock, net::IpAddr, path::PathBuf};
+use std::{io::StdoutLock, net::IpAddr};
 
 use anyhow::Error;
 use clap::{Args, Parser, Subcommand};
@@ -7,19 +7,26 @@ use mkutils::Utils;
 use tracing_subscriber::{
   Layer, filter::LevelFilter, fmt::format::FmtSpan, layer::SubscriberExt, util::SubscriberInitExt,
 };
+use ulid::Ulid;
 
-use crate::{client::Client, lean_server::LeanServer, server::Server, session_set::SessionSet};
+use crate::{
+  client::Client,
+  server::Server,
+  session_set::{NewSessionCommand, OpenFileCommand},
+};
 
 #[derive(Args)]
 struct Get {
   #[arg(long, default_value_t = Server::DEFAULT_PORT)]
   port: u16,
+
+  session_id: Option<Ulid>,
 }
 
 impl Get {
   async fn run(self) -> Result<(), Error> {
     Client::new(self.port)?
-      .get()
+      .get(self.session_id)
       .await?
       .session_ids
       .iter()
@@ -29,20 +36,37 @@ impl Get {
 }
 
 #[derive(Args)]
-struct Run {
-  #[arg(default_value = Self::DEFAULT_LEAN_PATH_STR)]
-  lean_path: PathBuf,
+struct New {
+  #[arg(long, default_value_t = Server::DEFAULT_PORT)]
+  port: u16,
 
-  #[arg(long = "log-dir", env = Self::LEAN_SERVER_LOG_DIRPATH_ENV_NAME)]
-  lean_server_log_dirpath: Option<PathBuf>,
+  #[command(flatten)]
+  command: NewSessionCommand,
 }
 
-impl Run {
-  const DEFAULT_LEAN_PATH_STR: &'static str = ".";
-  const LEAN_SERVER_LOG_DIRPATH_ENV_NAME: &'static str = LeanServer::LOG_DIRPATH_ENV_NAME;
-
+impl New {
   async fn run(self) -> Result<(), Error> {
-    SessionSet::run_session(self.lean_path, self.lean_server_log_dirpath).await
+    Client::new(self.port)?
+      .new_session(&self.command)
+      .await?
+      .session_id
+      .println()
+      .ok()
+  }
+}
+
+#[derive(Args)]
+struct Open {
+  #[arg(long, default_value_t = Server::DEFAULT_PORT)]
+  port: u16,
+
+  #[command(flatten)]
+  command: OpenFileCommand,
+}
+
+impl Open {
+  async fn run(self) -> Result<(), Error> {
+    Client::new(self.port)?.open_file(&self.command).await?.ok()
   }
 }
 
@@ -61,7 +85,9 @@ impl Serve {
 #[derive(Subcommand)]
 enum Command {
   Get(Get),
-  Run(Run),
+  New(New),
+  Open(Open),
+  Run(NewSessionCommand),
   Serve(Serve),
 }
 
@@ -115,7 +141,9 @@ impl CliArgs {
 
     match self.command {
       Command::Get(get) => get.run().await,
-      Command::Run(run) => run.run().await,
+      Command::New(new) => new.run().await,
+      Command::Open(open) => open.run().await,
+      Command::Run(new_session_command) => new_session_command.run().await,
       Command::Serve(serve) => serve.run().await,
     }
   }

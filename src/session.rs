@@ -13,7 +13,10 @@ use ulid::Ulid;
 use crate::lean_server::LeanServer;
 
 pub enum SessionCommand {
-  Noop { sender: OneshotSender<()> },
+  OpenFile {
+    sender: OneshotSender<()>,
+    filepath: PathBuf,
+  },
 }
 
 #[derive(Clone, Constructor)]
@@ -28,12 +31,11 @@ impl SessionClient {
   }
 
   // TODO-8dffbb
-  #[allow(dead_code)]
-  pub async fn noop(&self) -> Result<(), Error> {
+  pub async fn open_file(&self, filepath: PathBuf) -> Result<(), Error> {
     let (sender, receiver) = tokio::sync::oneshot::channel();
-    let noop_command = SessionCommand::Noop { sender };
+    let open_file_command = SessionCommand::OpenFile { sender, filepath };
 
-    self.sender.send(noop_command)?;
+    self.sender.send(open_file_command)?;
 
     receiver.await?.ok()
   }
@@ -92,7 +94,9 @@ impl Session {
   #[tracing::instrument(skip_all)]
   async fn process_command(&mut self, session_command: SessionCommand) -> Result<(), Error> {
     match session_command {
-      SessionCommand::Noop { sender } => ().send_to_oneshot(sender),
+      SessionCommand::OpenFile { sender, filepath } => {
+        tracing::info!(filepath = %filepath.display(), "opened filepath").send_to_oneshot(sender)
+      }
     }
   }
 
@@ -101,7 +105,7 @@ impl Session {
   pub async fn run(mut self) -> Result<(), Error> {
     loop {
       tokio::select! {
-        session_command_res = self.commands.next_item() => self.process_command(session_command_res?).await?,
+        session_command_res = self.commands.next_item_async() => self.process_command(session_command_res?).await?,
         result = &mut self.lean_server_run_task => result??,
       }
     }

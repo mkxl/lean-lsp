@@ -9,7 +9,7 @@ bytes = "1.10.1"
 clap = { version = "4.5.48", features = ["derive", "env"] }
 console-subscriber = "0.4.1"
 derive_more = { version = "2.0.1", features = ["constructor", "from"] }
-mkutils = { git = "https://github.com/mkxl/mkutils-rs", rev = "58e8c3e7528408512bbf8584ff59a62f9f3a048f", version = "0.1.0" }
+mkutils = { git = "https://github.com/mkxl/mkutils-rs", rev = "8d7ea6656839e216fe01424c8c5e6760a98e6b40", version = "0.1.0" }
 poem = { git = "https://github.com/0xb002f0/poem", version = "3.1.12", features = ["anyhow", "websocket"], rev = "70ee9a70f335c5961f12e290706fc89ddb1f54e7" }
 poem-openapi = { git = "https://github.com/0xb002f0/poem", version = "5.1.16", features = ["ulid", "websocket"], rev = "70ee9a70f335c5961f12e290706fc89ddb1f54e7" }
 reqwest = { version = "0.12.23", features = ["json"] }
