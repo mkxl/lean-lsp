@@ -10,7 +10,7 @@ use serde::{Serialize, de::DeserializeOwned};
 use serde_json::Value as Json;
 use tokio::{
   io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader},
-  process::{ChildStderr, ChildStdin, ChildStdout},
+  process::{Child, ChildStderr, ChildStdin, ChildStdout},
   sync::mpsc::{UnboundedReceiver as UnboundedMpscReceiver, UnboundedSender as UnboundedMpscSender},
   task::JoinHandle,
 };
@@ -65,6 +65,7 @@ impl LeanServerStdout {
 }
 
 struct LeanServerProcess {
+  child: Child,
   inputs: UnboundedMpscReceiverStream<Vec<u8>>,
   outputs: UnboundedMpscSender<BytesMut>,
   stdin: ChildStdin,
@@ -83,10 +84,11 @@ impl LeanServerProcess {
     outputs: UnboundedMpscSender<BytesMut>,
   ) -> Result<Self, Error> {
     let inputs = inputs.into_stream();
-    let (stdin, stdout, stderr) = Self::process(&project_dirpath.absolute()?, log_dirpath)?.into_stdio();
+    let (child, stdin, stdout, stderr) = Self::process(&project_dirpath.absolute()?, log_dirpath)?.into_parts();
     let stdout = LeanServerStdout::new(stdout);
     let stderr = BufReader::new(stderr).lines().into_stream();
     let lean_server = Self {
+      child,
       inputs,
       outputs,
       stdin,
@@ -122,7 +124,8 @@ impl LeanServerProcess {
       tokio::select! {
         input_byte_str_res = self.inputs.next_item_async() => self.write_to_process(&input_byte_str_res?).await?,
         output_byte_str_res = self.stdout.next_message() => self.outputs.send(output_byte_str_res?)?,
-        line_res = self.stderr.next_item_async() => tracing::warn!(line = line_res??, "stderr message"),
+        message_res = self.stderr.next_item_async() => tracing::warn!(message = message_res??, "stderr message"),
+        exit_status_res = self.child.wait() => tracing::warn!(exit_status = %exit_status_res?, "lean server process ended"),
       }
     }
   }
@@ -141,7 +144,7 @@ impl LeanServer {
 
   pub async fn new(project_dirpath: &Path, log_dirpath: Option<&Path>) -> Result<Self, Error> {
     // NOTE-97a211
-    let project_dirpath = project_dirpath.absolute()?;
+    let project_dirpath = project_dirpath.absolute()?.into_owned();
     let (inputs, process_inputs) = tokio::sync::mpsc::unbounded_channel();
     let (process_outputs, outputs) = tokio::sync::mpsc::unbounded_channel();
     let outputs = outputs.into_stream();

@@ -1,12 +1,9 @@
-use std::{io::StdoutLock, net::IpAddr};
+use std::io::StdoutLock;
 
 use anyhow::Error;
 use clap::{Args, Parser, Subcommand};
-use console_subscriber::{ConsoleLayer, Server as ConsoleServer};
-use mkutils::Utils;
-use tracing_subscriber::{
-  Layer, filter::LevelFilter, fmt::format::FmtSpan, layer::SubscriberExt, util::SubscriberInitExt,
-};
+use mkutils::{Tracing, Utils};
+use tracing_subscriber::filter::LevelFilter;
 use ulid::Ulid;
 
 use crate::{
@@ -94,46 +91,36 @@ enum Command {
 #[derive(Parser)]
 pub struct CliArgs {
   #[arg(long = "log-level", default_value_t = LevelFilter::INFO, env = Self::LOG_LEVEL_ENV_NAME)]
-  log_level_filter: LevelFilter,
+  tracing_level_filter: LevelFilter,
 
-  #[arg(long = "tokio-console", require_equals = true)]
-  #[allow(clippy::option_option)]
-  tokio_console_port: Option<Option<u16>>,
+  #[arg(long = "no-log-json")]
+  tracing_json_disabled: bool,
+
+  #[arg(long = "tokio-console-port", default_value_t = Tracing::DEFAULT_TOKIO_CONSOLE_PORT)]
+  tracing_tokio_console_port: u16,
+
+  #[arg(long = "tokio-console")]
+  tracing_tokio_console_enabled: bool,
 
   #[command(subcommand)]
   command: Command,
 }
 
 impl CliArgs {
-  const DEFAULT_TOKIO_CONSOLE_PORT: u16 = ConsoleServer::DEFAULT_PORT;
-  const DEFAULT_TOKIO_CONSOLE_IP_ADDR: IpAddr = ConsoleServer::DEFAULT_IP;
   const LOG_LEVEL_ENV_NAME: &'static str = "LOG_LEVEL";
 
   fn log_writer() -> StdoutLock<'static> {
     std::io::stdout().lock()
   }
 
-  fn tracing_span_events() -> FmtSpan {
-    FmtSpan::NEW | FmtSpan::CLOSE
-  }
-
   fn init_tracing(&self) {
-    let log_layer = tracing_subscriber::fmt::layer()
-      .with_span_events(Self::tracing_span_events())
+    Tracing::default()
+      .with_level_filter(self.tracing_level_filter)
+      .with_json_enabled(!self.tracing_json_disabled)
+      .with_tokio_console_port(self.tracing_tokio_console_port)
+      .with_tokio_console_enabled(self.tracing_tokio_console_enabled)
       .with_writer(Self::log_writer)
-      .json()
-      .with_filter(self.log_level_filter);
-    let registry = tracing_subscriber::registry().with(log_layer);
-
-    if let Some(tokio_console_server_port_opt) = self.tokio_console_port {
-      let tokio_console_server_port = tokio_console_server_port_opt.unwrap_or(Self::DEFAULT_TOKIO_CONSOLE_PORT);
-      let tokio_console_server_addr = (Self::DEFAULT_TOKIO_CONSOLE_IP_ADDR, tokio_console_server_port);
-      let console_layer = ConsoleLayer::builder().server_addr(tokio_console_server_addr).spawn();
-
-      registry.with(console_layer).init();
-    } else {
-      registry.init();
-    }
+      .init();
   }
 
   pub async fn run(self) -> Result<(), Error> {
