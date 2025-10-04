@@ -3,10 +3,8 @@ use std::path::{Path, PathBuf};
 use anyhow::Error;
 use derive_more::Constructor;
 use mkutils::{IntoStream, Utils};
-use tokio::{
-  sync::{mpsc::UnboundedSender as UnboundedMpscSender, oneshot::Sender as OneshotSender},
-  task::JoinHandle,
-};
+use serde_json::Value as Json;
+use tokio::sync::{mpsc::UnboundedSender as UnboundedMpscSender, oneshot::Sender as OneshotSender};
 use tokio_stream::wrappers::UnboundedReceiverStream as UnboundedMpscReceiverStream;
 use ulid::Ulid;
 
@@ -14,7 +12,7 @@ use crate::lean_server::LeanServer;
 
 pub enum SessionCommand {
   OpenFile {
-    sender: OneshotSender<()>,
+    sender: OneshotSender<Result<(), Error>>,
     filepath: PathBuf,
   },
 }
@@ -37,13 +35,13 @@ impl SessionClient {
 
     self.sender.send(open_file_command)?;
 
-    receiver.await?.ok()
+    receiver.await?
   }
 }
 
 pub struct Session {
   id: Ulid,
-  lean_server_run_task: JoinHandle<Result<(), Error>>,
+  lean_server: LeanServer,
   project_dirpath: PathBuf,
   commands: UnboundedMpscReceiverStream<SessionCommand>,
 }
@@ -51,17 +49,15 @@ pub struct Session {
 impl Session {
   const MANIFEST_FILE_NAME: &'static str = "lake-manifest.json";
 
-  pub fn new(lean_path: &Path, lean_server_log_dirpath: Option<&Path>) -> Result<(Self, SessionClient), Error> {
+  pub async fn new(lean_path: &Path, lean_server_log_dirpath: Option<&Path>) -> Result<(Self, SessionClient), Error> {
     let id = Ulid::new();
     let project_dirpath = Self::project_dirpath(lean_path)?;
-    let lean_server_run_task = LeanServer::new(&project_dirpath, lean_server_log_dirpath)?
-      .run()
-      .spawn_task();
+    let lean_server = LeanServer::new(&project_dirpath, lean_server_log_dirpath).await?;
     let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();
     let commands = receiver.into_stream();
     let session = Self {
       id,
-      lean_server_run_task,
+      lean_server,
       project_dirpath,
       commands,
     };
@@ -90,13 +86,27 @@ impl Session {
     anyhow::bail!("unable to get project dirpath: no manifest file found in ancestor dirpaths");
   }
 
-  #[allow(clippy::unused_async)]
+  #[tracing::instrument(skip_all)]
+  async fn open_file(&mut self, filepath: &Path) -> Result<(), Error> {
+    let messages = [
+      crate::messages::text_document::did_open_notification(filepath),
+      crate::messages::text_document::document_symbol_request(filepath),
+      crate::messages::text_document::document_code_action_request(filepath),
+      crate::messages::text_document::folding_range_request(filepath),
+      crate::messages::lean_rpc::connect_request(filepath),
+    ];
+
+    for message in messages {
+      self.lean_server.send(message)?;
+    }
+
+    ().ok()
+  }
+
   #[tracing::instrument(skip_all)]
   async fn process_command(&mut self, session_command: SessionCommand) -> Result<(), Error> {
     match session_command {
-      SessionCommand::OpenFile { sender, filepath } => {
-        tracing::info!(filepath = %filepath.display(), "opened filepath").send_to_oneshot(sender)
-      }
+      SessionCommand::OpenFile { sender, filepath } => self.open_file(&filepath).await.send_to_oneshot(sender),
     }
   }
 
@@ -106,7 +116,7 @@ impl Session {
     loop {
       tokio::select! {
         session_command_res = self.commands.next_item_async() => self.process_command(session_command_res?).await?,
-        result = &mut self.lean_server_run_task => result??,
+        json_res = self.lean_server.recv::<Json>() => tracing::info!(message = %json_res?, "received message"),
       }
     }
   }

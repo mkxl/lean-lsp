@@ -4,7 +4,6 @@ mod cli_args;
 mod client;
 mod lean_server;
 mod messages;
-mod process;
 mod server;
 mod session;
 mod session_set;

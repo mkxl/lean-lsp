@@ -5,7 +5,7 @@ use mkutils::Utils;
 use serde_json::Value as Json;
 
 #[allow(clippy::too_many_lines)]
-pub fn json(root_path: &Path, process_id: u32) -> Result<Json, Error> {
+pub fn request(root_path: &Path, process_id: u32) -> Result<Json, Error> {
   let root_path = root_path.absolute()?;
   let root_uri = root_path.to_uri()?;
   let json = serde_json::json!({
