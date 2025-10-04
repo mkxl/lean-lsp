@@ -10,10 +10,10 @@ use mkutils::{IntoStream, Utils};
 use poem_openapi::Object;
 use serde::{Deserialize, Serialize};
 use tokio::{
-  sync::{mpsc::UnboundedSender as UnboundedMpscSender, oneshot::Sender as OneshotSender},
+  sync::{mpsc::UnboundedSender as MpscUnboundedSender, oneshot::Sender as OneshotSender},
   task::JoinSet,
 };
-use tokio_stream::wrappers::UnboundedReceiverStream as UnboundedMpscReceiverStream;
+use tokio_stream::wrappers::UnboundedReceiverStream as MpscUnboundedReceiverStream;
 use ulid::Ulid;
 
 use crate::{
@@ -63,7 +63,7 @@ pub enum SessionSetCommand {
 
 #[derive(Constructor)]
 pub struct SessionSetClient {
-  sender: UnboundedMpscSender<SessionSetCommand>,
+  sender: MpscUnboundedSender<SessionSetCommand>,
 }
 
 impl SessionSetClient {
@@ -105,7 +105,7 @@ impl SessionSetClient {
 }
 
 pub struct SessionSet {
-  commands: UnboundedMpscReceiverStream<SessionSetCommand>,
+  commands: MpscUnboundedReceiverStream<SessionSetCommand>,
   session_clients: HashMap<Ulid, SessionClient>,
   session_run_join_set: JoinSet<(Ulid, Result<(), Error>)>,
 }

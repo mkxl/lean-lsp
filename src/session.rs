@@ -4,8 +4,8 @@ use anyhow::Error;
 use derive_more::Constructor;
 use mkutils::{IntoStream, Utils};
 use serde_json::Value as Json;
-use tokio::sync::{mpsc::UnboundedSender as UnboundedMpscSender, oneshot::Sender as OneshotSender};
-use tokio_stream::wrappers::UnboundedReceiverStream as UnboundedMpscReceiverStream;
+use tokio::sync::{mpsc::UnboundedSender as MpscUnboundedSender, oneshot::Sender as OneshotSender};
+use tokio_stream::wrappers::UnboundedReceiverStream as MpscUnboundedReceiverStream;
 use ulid::Ulid;
 
 use crate::lean_server::LeanServer;
@@ -20,7 +20,7 @@ pub enum SessionCommand {
 #[derive(Clone, Constructor)]
 pub struct SessionClient {
   id: Ulid,
-  sender: UnboundedMpscSender<SessionCommand>,
+  sender: MpscUnboundedSender<SessionCommand>,
 }
 
 impl SessionClient {
@@ -43,7 +43,7 @@ pub struct Session {
   id: Ulid,
   lean_server: LeanServer,
   project_dirpath: PathBuf,
-  commands: UnboundedMpscReceiverStream<SessionCommand>,
+  commands: MpscUnboundedReceiverStream<SessionCommand>,
 }
 
 impl Session {

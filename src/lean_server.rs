@@ -11,10 +11,10 @@ use serde_json::Value as Json;
 use tokio::{
   io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader},
   process::{Child, ChildStderr, ChildStdin, ChildStdout},
-  sync::mpsc::{UnboundedReceiver as UnboundedMpscReceiver, UnboundedSender as UnboundedMpscSender},
+  sync::mpsc::{UnboundedReceiver as MpscUnboundedReceiver, UnboundedSender as MpscUnboundedSender},
   task::JoinHandle,
 };
-use tokio_stream::wrappers::{LinesStream, UnboundedReceiverStream as UnboundedMpscReceiverStream};
+use tokio_stream::wrappers::{LinesStream, UnboundedReceiverStream as MpscUnboundedReceiverStream};
 use valuable::Valuable;
 
 struct LeanServerStdout {
@@ -66,8 +66,8 @@ impl LeanServerStdout {
 
 struct LeanServerProcess {
   child: Child,
-  inputs: UnboundedMpscReceiverStream<Vec<u8>>,
-  outputs: UnboundedMpscSender<BytesMut>,
+  inputs: MpscUnboundedReceiverStream<Vec<u8>>,
+  outputs: MpscUnboundedSender<BytesMut>,
   stdin: ChildStdin,
   stdout: LeanServerStdout,
   stderr: LinesStream<BufReader<ChildStderr>>,
@@ -80,8 +80,8 @@ impl LeanServerProcess {
   pub fn new(
     project_dirpath: &Path,
     log_dirpath: Option<&Path>,
-    inputs: UnboundedMpscReceiver<Vec<u8>>,
-    outputs: UnboundedMpscSender<BytesMut>,
+    inputs: MpscUnboundedReceiver<Vec<u8>>,
+    outputs: MpscUnboundedSender<BytesMut>,
   ) -> Result<Self, Error> {
     let inputs = inputs.into_stream();
     let (child, stdin, stdout, stderr) = Self::process(&project_dirpath.absolute()?, log_dirpath)?.into_parts();
@@ -133,8 +133,8 @@ impl LeanServerProcess {
 
 #[allow(dead_code)]
 pub struct LeanServer {
-  inputs: UnboundedMpscSender<Vec<u8>>,
-  outputs: UnboundedMpscReceiverStream<BytesMut>,
+  inputs: MpscUnboundedSender<Vec<u8>>,
+  outputs: MpscUnboundedReceiverStream<BytesMut>,
   project_dirpath: PathBuf,
   process_handle: JoinHandle<Result<(), Error>>,
 }
