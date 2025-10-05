@@ -10,10 +10,10 @@ use mkutils::{IntoStream, Utils};
 use poem_openapi::Object;
 use serde::{Deserialize, Serialize};
 use tokio::{
-  sync::{mpsc::UnboundedSender as UnboundedMpscSender, oneshot::Sender as OneshotSender},
+  sync::{mpsc::UnboundedSender as MpscUnboundedSender, oneshot::Sender as OneshotSender},
   task::JoinSet,
 };
-use tokio_stream::wrappers::UnboundedReceiverStream as UnboundedMpscReceiverStream;
+use tokio_stream::wrappers::UnboundedReceiverStream as MpscUnboundedReceiverStream;
 use ulid::Ulid;
 
 use crate::{
@@ -63,7 +63,7 @@ pub enum SessionSetCommand {
 
 #[derive(Constructor)]
 pub struct SessionSetClient {
-  sender: UnboundedMpscSender<SessionSetCommand>,
+  sender: MpscUnboundedSender<SessionSetCommand>,
 }
 
 impl SessionSetClient {
@@ -105,9 +105,9 @@ impl SessionSetClient {
 }
 
 pub struct SessionSet {
-  commands: UnboundedMpscReceiverStream<SessionSetCommand>,
+  commands: MpscUnboundedReceiverStream<SessionSetCommand>,
   session_clients: HashMap<Ulid, SessionClient>,
-  session_run_task_join_set: JoinSet<(Ulid, Result<(), Error>)>,
+  session_run_join_set: JoinSet<(Ulid, Result<(), Error>)>,
 }
 
 impl SessionSet {
@@ -115,24 +115,28 @@ impl SessionSet {
     let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();
     let commands = receiver.into_stream();
     let session_clients = HashMap::new();
-    let session_run_task_join_set = JoinSet::new();
+    let session_run_join_set = JoinSet::new();
     let session_set = Self {
       commands,
       session_clients,
-      session_run_task_join_set,
+      session_run_join_set,
     };
     let session_set_client = SessionSetClient::new(sender);
 
     (session_set, session_set_client)
   }
 
-  fn new_session(&mut self, lean_path: &Path, lean_server_log_dirpath: Option<&Path>) -> Result<SessionClient, Error> {
-    let (session, session_client) = Session::new(lean_path, lean_server_log_dirpath)?;
+  async fn new_session(
+    &mut self,
+    lean_path: &Path,
+    lean_server_log_dirpath: Option<&Path>,
+  ) -> Result<SessionClient, Error> {
+    let (session, session_client) = Session::new(lean_path, lean_server_log_dirpath).await?;
     let session_id = session.id();
     let session_run_future = async move { (session.id(), session.run().await) };
 
     self.session_clients.insert(session_id, session_client.clone());
-    self.session_run_task_join_set.spawn(session_run_future);
+    self.session_run_join_set.spawn(session_run_future);
 
     session_client.ok()
   }
@@ -151,12 +155,12 @@ impl SessionSet {
     }
   }
 
-  #[allow(clippy::unused_async)]
   #[tracing::instrument(skip_all)]
   async fn process_command(&mut self, command: SessionSetCommand) -> Result<(), Error> {
     match command {
       SessionSetCommand::NewSession { sender, command } => self
         .new_session(command.lean_path.as_ref(), command.lean_server_log_dirpath.map_as_ref())
+        .await
         .send_to_oneshot(sender)?,
       SessionSetCommand::GetSessionClients { sender } => self.get_session_clients().send_to_oneshot(sender)?,
       SessionSetCommand::GetSessionClient { sender, session_id } => {
@@ -183,7 +187,7 @@ impl SessionSet {
     loop {
       tokio::select! {
         session_set_command_res = self.commands.next_item_async() => self.process_command(session_set_command_res?).await.log_error("error processing command").unit(),
-        session_id_and_run_result = self.session_run_task_join_set.join_next() => match session_id_and_run_result {
+        session_id_and_run_result = self.session_run_join_set.join_next() => match session_id_and_run_result {
           Some(Ok((session_id, session_run_result))) => self.cleanup_session(session_id, session_run_result),
           Some(Err(join_error)) => tracing::warn!(%join_error, "session run task failed to execute to completion"),
           None => tokio::task::yield_now().await,
@@ -195,7 +199,7 @@ impl SessionSet {
   #[tracing::instrument(skip_all)]
   pub async fn run_session(lean_path: PathBuf, lean_server_log_dirpath: Option<PathBuf>) -> Result<(), Error> {
     let (session_set, session_set_client) = Self::new();
-    let session_set_run_task = session_set.run().spawn_task();
+    let session_set_handle = session_set.run().spawn_task();
 
     // NOTE-97a211:
     // - if [session_set.run()] is not already running, then
@@ -208,6 +212,6 @@ impl SessionSet {
       .new_session(lean_path, lean_server_log_dirpath)
       .await?;
 
-    session_set_run_task.await?
+    session_set_handle.await?
   }
 }
