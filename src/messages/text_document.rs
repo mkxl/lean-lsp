@@ -1,23 +1,35 @@
-use std::path::Path;
-
 use serde_json::Value as Json;
 
-#[allow(unused_variables)]
-pub fn did_open_notification(filepath: &Path) -> Json {
-  std::todo!()
+const LEAN_LANGUAGE_ID: &str = "lean4";
+const INITIAL_TEXT_DOCUMENT_VERSION: usize = 0;
+
+pub fn did_open_notification_params(text: &str, uri: &str) -> Json {
+  serde_json::json!({
+      "dependencyBuildMode": "never",
+      "textDocument": {
+          "languageId": LEAN_LANGUAGE_ID,
+          "text": text,
+          "uri": uri,
+          "version": INITIAL_TEXT_DOCUMENT_VERSION,
+      },
+  })
 }
 
-#[allow(unused_variables)]
-pub fn document_symbol_request(filepath: &Path) -> Json {
-  std::todo!()
+pub fn document_symbol_params(uri: &str) -> Json {
+  serde_json::json!({"textDocument": {"uri": uri}})
 }
 
-#[allow(unused_variables)]
-pub fn document_code_action_request(filepath: &Path) -> Json {
-  std::todo!()
+pub fn document_code_action_params(uri: &str) -> Json {
+  serde_json::json!({
+      "context": {"diagnostics": [], "triggerKind": 2},
+      "range": {
+          "end": {"character": 0, "line": 0},
+          "start": {"character": 0, "line": 0},
+      },
+      "textDocument": {"uri": uri},
+  })
 }
 
-#[allow(unused_variables)]
-pub fn folding_range_request(filepath: &Path) -> Json {
-  std::todo!()
+pub fn folding_range_params(uri: &str) -> Json {
+  serde_json::json!({"textDocument": {"uri": uri}})
 }
