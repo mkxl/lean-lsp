@@ -88,12 +88,20 @@ impl Session {
 
   #[tracing::instrument(skip_all)]
   async fn open_file(&mut self, filepath: &Path) -> Result<(), Error> {
+    let uri = filepath.to_uri()?;
+    let text = filepath
+      .open_async()
+      .await?
+      .buf_reader_async()
+      .read_string_async()
+      .await?;
+    let messages = self.lean_server.messages();
     let messages = [
-      crate::messages::text_document::did_open_notification(filepath),
-      crate::messages::text_document::document_symbol_request(filepath),
-      crate::messages::text_document::document_code_action_request(filepath),
-      crate::messages::text_document::folding_range_request(filepath),
-      crate::messages::lean_rpc::connect_request(filepath),
+      messages.text_document_did_open_notification(&text, &uri),
+      messages.text_document_document_symbol_request(&uri),
+      messages.text_document_document_code_action_request(&uri),
+      messages.text_document_folding_range_request(&uri),
+      messages.lean_rpc_connect_request(&uri),
     ];
 
     for message in messages {

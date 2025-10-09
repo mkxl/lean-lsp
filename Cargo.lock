@@ -1224,7 +1224,7 @@ dependencies = [
 [[package]]
 name = "mkutils"
 version = "0.1.0"
-source = "git+https://github.com/mkxl/mkutils-rs?rev=de2ca62338918684a0015c2c6389d4e3e294ad95#de2ca62338918684a0015c2c6389d4e3e294ad95"
+source = "git+https://github.com/mkxl/mkutils-rs?rev=a4a968390c38160d2f5397bcdecaeea3a944c80c#a4a968390c38160d2f5397bcdecaeea3a944c80c"
 dependencies = [
  "anyhow",
  "console-subscriber",

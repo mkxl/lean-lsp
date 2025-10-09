@@ -17,6 +17,8 @@ use tokio::{
 use tokio_stream::wrappers::{LinesStream, UnboundedReceiverStream as MpscUnboundedReceiverStream};
 use valuable::Valuable;
 
+use crate::messages::Messages;
+
 struct LeanServerStdout {
   buf: BytesMut,
   stdout: ChildStdout,
@@ -86,7 +88,7 @@ impl LeanServerProcess {
     let inputs = inputs.into_stream();
     let (child, stdin, stdout, stderr) = Self::process(&project_dirpath.absolute()?, log_dirpath)?.into_parts();
     let stdout = LeanServerStdout::new(stdout);
-    let stderr = BufReader::new(stderr).lines().into_stream();
+    let stderr = stderr.buf_reader_async().lines().into_stream();
     let lean_server = Self {
       child,
       inputs,
@@ -137,6 +139,7 @@ pub struct LeanServer {
   outputs: MpscUnboundedReceiverStream<BytesMut>,
   project_dirpath: PathBuf,
   process_handle: JoinHandle<Result<(), Error>>,
+  messages: Messages,
 }
 
 impl LeanServer {
@@ -151,11 +154,13 @@ impl LeanServer {
     let process_handle = LeanServerProcess::new(&project_dirpath, log_dirpath, process_inputs, process_outputs)?
       .run()
       .spawn_task();
+    let messages = Messages::default();
     let mut lean_server = Self {
       inputs,
       outputs,
       project_dirpath,
       process_handle,
+      messages,
     };
 
     lean_server.init().await?;
@@ -164,20 +169,32 @@ impl LeanServer {
   }
 
   async fn init(&mut self) -> Result<(), Error> {
-    let initialize_request = crate::messages::initialize::request(&self.project_dirpath, std::process::id())?;
+    let root_path = self.project_dirpath.absolute()?;
+    let root_uri = root_path.to_uri()?;
+    let name = root_path.file_name_ok()?.to_str_ok()?;
+    let initialize_request = self.messages.initialize_request(&root_path, &root_uri, name);
+    let initialized_notification = self.messages.initialized_notification();
 
     self.send(initialize_request)?;
 
     // TODO: note this should be the received initialize request response, and i
-    // should not send any more messages until this is received
+    // should not send any more messages until this is received; need to verify
+    // (probs by checking the request id matches -- can add a proper type to
+    // deserialize to)
     let response = self.recv::<Json>().await?;
 
     tracing::info!(response = response.as_value(), "initial lean server response");
 
+    self.send(initialized_notification)?;
+
     ().ok()
   }
 
-  pub fn send<T: Serialize>(&mut self, value: T) -> Result<(), Error> {
+  pub fn messages(&self) -> &Messages {
+    &self.messages
+  }
+
+  pub fn send<T: Serialize>(&self, value: T) -> Result<(), Error> {
     let json_byte_str = value.json_byte_str()?;
 
     self.inputs.send(json_byte_str)?;

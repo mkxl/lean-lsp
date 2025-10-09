@@ -1,8 +1,5 @@
-use std::path::Path;
-
 use serde_json::Value as Json;
 
-#[allow(unused_variables)]
-pub fn connect_request(filepath: &Path) -> Json {
-  std::todo!()
+pub fn connect_params(uri: &str) -> Json {
+  serde_json::json!({"uri": uri})
 }
