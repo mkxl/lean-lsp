@@ -126,7 +126,7 @@ impl LeanServerProcess {
       tokio::select! {
         input_byte_str_res = self.inputs.next_item_async() => self.write_to_process(&input_byte_str_res?).await?,
         output_byte_str_res = self.stdout.next_message() => self.outputs.send(output_byte_str_res?)?,
-        message_res = self.stderr.next_item_async() => tracing::warn!(message = message_res??, "stderr message"),
+        message_res = self.stderr.next_item_async() => tracing::warn!(stderr_message = message_res??, "stderr message"),
         exit_status_res = self.child.wait() => tracing::warn!(exit_status = %exit_status_res?, "lean server process ended"),
       }
     }
