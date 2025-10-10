@@ -124,7 +124,7 @@ impl Session {
     loop {
       tokio::select! {
         session_command_res = self.commands.next_item_async() => self.process_command(session_command_res?).await?,
-        json_res = self.lean_server.recv::<Json>() => tracing::info!(message = %json_res?, "received message"),
+        json_res = self.lean_server.recv::<Json>() => tracing::info!(received_message = %json_res?, "received message"),
       }
     }
   }
