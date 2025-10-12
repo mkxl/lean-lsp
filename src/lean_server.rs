@@ -6,7 +6,8 @@ use std::{
 use anyhow::{Context, Error};
 use bytes::{Buf, BytesMut};
 use mkutils::{IntoStream, Process, Utils};
-use serde::{Serialize, de::DeserializeOwned};
+use poem_openapi::Object;
+use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use serde_json::Value as Json;
 use tokio::{
   io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader},
@@ -133,7 +134,11 @@ impl LeanServerProcess {
   }
 }
 
-#[allow(dead_code)]
+#[derive(Deserialize, Object, Serialize)]
+pub struct ProcessStatus {
+  pub is_finished: bool,
+}
+
 pub struct LeanServer {
   inputs: MpscUnboundedSender<Vec<u8>>,
   outputs: MpscUnboundedReceiverStream<BytesMut>,
@@ -206,5 +211,11 @@ impl LeanServer {
 
   pub async fn recv<T: DeserializeOwned>(&mut self) -> Result<T, Error> {
     self.outputs.next_item_async().await?.json_from_byte_str::<T>()?.ok()
+  }
+
+  pub fn process_status(&self) -> ProcessStatus {
+    ProcessStatus {
+      is_finished: self.process_handle.is_finished(),
+    }
   }
 }

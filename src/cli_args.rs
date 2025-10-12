@@ -8,8 +8,9 @@ use ulid::Ulid;
 
 use crate::{
   client::Client,
+  commands::{NewSessionCommand, OpenFileCommand},
   server::Server,
-  session_set::{NewSessionCommand, OpenFileCommand},
+  session_set::SessionSet,
 };
 
 #[derive(Args)]
@@ -25,9 +26,9 @@ impl Get {
     Client::new(self.port)?
       .get(self.session_id)
       .await?
-      .session_ids
-      .iter()
-      .for_each(Utils::println)
+      .sessions
+      .json_str()?
+      .println()
       .ok()
   }
 }
@@ -123,6 +124,14 @@ impl CliArgs {
       .init();
   }
 
+  async fn run_session(new_session_command: NewSessionCommand) -> Result<(), Error> {
+    SessionSet::run_session(
+      new_session_command.lean_path,
+      new_session_command.lean_server_log_dirpath,
+    )
+    .await
+  }
+
   pub async fn run(self) -> Result<(), Error> {
     self.init_tracing();
 
@@ -130,7 +139,7 @@ impl CliArgs {
       Command::Get(get) => get.run().await,
       Command::New(new) => new.run().await,
       Command::Open(open) => open.run().await,
-      Command::Run(new_session_command) => new_session_command.run().await,
+      Command::Run(new_session_command) => Self::run_session(new_session_command).await,
       Command::Serve(serve) => serve.run().await,
     }
   }

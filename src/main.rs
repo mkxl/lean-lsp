@@ -2,11 +2,14 @@
 
 mod cli_args;
 mod client;
+mod commands;
 mod lean_server;
 mod messages;
 mod server;
 mod session;
+mod session_runner;
 mod session_set;
+mod session_set_runner;
 
 use anyhow::Error;
 use clap::Parser;

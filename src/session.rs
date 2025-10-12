@@ -1,29 +1,40 @@
 use std::path::{Path, PathBuf};
 
 use anyhow::Error;
-use derive_more::Constructor;
-use mkutils::{IntoStream, Utils};
-use serde_json::Value as Json;
-use tokio::sync::{mpsc::UnboundedSender as MpscUnboundedSender, oneshot::Sender as OneshotSender};
-use tokio_stream::wrappers::UnboundedReceiverStream as MpscUnboundedReceiverStream;
+use mkutils::Utils;
+use poem_openapi::Object;
+use serde::{Deserialize, Serialize};
+use tokio::sync::mpsc::UnboundedSender as MpscUnboundedSender;
 use ulid::Ulid;
 
-use crate::lean_server::LeanServer;
+use crate::{commands::SessionCommand, lean_server::ProcessStatus, session_runner::SessionRunner};
 
-pub enum SessionCommand {
-  OpenFile {
-    sender: OneshotSender<Result<(), Error>>,
-    filepath: PathBuf,
-  },
-}
-
-#[derive(Clone, Constructor)]
-pub struct SessionClient {
+#[derive(Deserialize, Object, Serialize)]
+pub struct SessionStatus {
   id: Ulid,
-  sender: MpscUnboundedSender<SessionCommand>,
+  process: ProcessStatus,
 }
 
-impl SessionClient {
+#[derive(Clone)]
+pub struct Session {
+  id: Ulid,
+  commands: MpscUnboundedSender<SessionCommand>,
+}
+
+impl Session {
+  pub async fn new(
+    lean_path: &Path,
+    lean_server_log_dirpath: Option<&Path>,
+  ) -> Result<(Session, SessionRunner), Error> {
+    let id = Ulid::new();
+    let (commands, runner_commands) = tokio::sync::mpsc::unbounded_channel();
+    let session_runner = SessionRunner::new(id, runner_commands, lean_path, lean_server_log_dirpath).await?;
+    let session = Session { id, commands };
+    let pair = session.pair(session_runner);
+
+    pair.ok()
+  }
+
   pub fn id(&self) -> Ulid {
     self.id
   }
@@ -33,99 +44,22 @@ impl SessionClient {
     let (sender, receiver) = tokio::sync::oneshot::channel();
     let open_file_command = SessionCommand::OpenFile { sender, filepath };
 
-    self.sender.send(open_file_command)?;
+    self.commands.send(open_file_command)?;
 
     receiver.await?
   }
-}
-
-pub struct Session {
-  id: Ulid,
-  lean_server: LeanServer,
-  project_dirpath: PathBuf,
-  commands: MpscUnboundedReceiverStream<SessionCommand>,
-}
-
-impl Session {
-  const MANIFEST_FILE_NAME: &'static str = "lake-manifest.json";
-
-  pub async fn new(lean_path: &Path, lean_server_log_dirpath: Option<&Path>) -> Result<(Self, SessionClient), Error> {
-    let id = Ulid::new();
-    let project_dirpath = Self::project_dirpath(lean_path)?;
-    let lean_server = LeanServer::new(&project_dirpath, lean_server_log_dirpath).await?;
-    let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();
-    let commands = receiver.into_stream();
-    let session = Self {
-      id,
-      lean_server,
-      project_dirpath,
-      commands,
-    };
-    let session_client = SessionClient::new(id, sender);
-
-    tracing::info!(id = %session.id, project_dirpath = %session.project_dirpath.display(), "new session");
-
-    (session, session_client).ok()
-  }
-
-  pub fn id(&self) -> Ulid {
-    self.id
-  }
-
-  fn project_dirpath(lean_path: &Path) -> Result<PathBuf, Error> {
-    for ancestor_path in lean_path.ancestors() {
-      let mut manifest_filepath = ancestor_path.with_file_name(Self::MANIFEST_FILE_NAME);
-
-      if manifest_filepath.is_file() {
-        manifest_filepath.pop();
-
-        return manifest_filepath.ok();
-      }
-    }
-
-    anyhow::bail!("unable to get project dirpath: no manifest file found in ancestor dirpaths");
-  }
-
-  #[tracing::instrument(skip_all)]
-  async fn open_file(&mut self, filepath: &Path) -> Result<(), Error> {
-    let uri = filepath.to_uri()?;
-    let text = filepath
-      .open_async()
-      .await?
-      .buf_reader_async()
-      .read_string_async()
-      .await?;
-    let messages = self.lean_server.messages();
-    let messages = [
-      messages.text_document_did_open_notification(&text, &uri),
-      messages.text_document_document_symbol_request(&uri),
-      messages.text_document_document_code_action_request(&uri),
-      messages.text_document_folding_range_request(&uri),
-      messages.lean_rpc_connect_request(&uri),
-    ];
-
-    for message in messages {
-      self.lean_server.send(message)?;
-    }
-
-    ().ok()
-  }
-
-  #[tracing::instrument(skip_all)]
-  async fn process_command(&mut self, session_command: SessionCommand) -> Result<(), Error> {
-    match session_command {
-      SessionCommand::OpenFile { sender, filepath } => self.open_file(&filepath).await.send_to_oneshot(sender),
-    }
-  }
 
   // TODO-8dffbb
-  #[tracing::instrument(skip_all)]
-  pub async fn run(mut self) -> Result<(), Error> {
-    loop {
-      tokio::select! {
-        session_command_res = self.commands.next_item_async() => self.process_command(session_command_res?).await?,
-        json_res = self.lean_server.recv::<Json>() => tracing::info!(received_message = %json_res?, "received message"),
-      }
-    }
+  pub async fn status(&self) -> Result<SessionStatus, Error> {
+    let (sender, receiver) = tokio::sync::oneshot::channel();
+    let get_process_status = SessionCommand::GetProcessStatus { sender };
+
+    self.commands.send(get_process_status)?;
+
+    let id = self.id;
+    let process = receiver.await?;
+    let session_status = SessionStatus { id, process };
+
+    session_status.ok()
   }
 }
