@@ -11,12 +11,12 @@ mod session_runner;
 mod session_set;
 mod session_set_runner;
 
-use anyhow::Error;
+use anyhow::Error as AnyhowError;
 use clap::Parser;
 
 use crate::cli_args::CliArgs;
 
 #[tokio::main]
-async fn main() -> Result<(), Error> {
+async fn main() -> Result<(), AnyhowError> {
   CliArgs::parse().run().await
 }

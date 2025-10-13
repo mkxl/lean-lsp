@@ -1,4 +1,4 @@
-use anyhow::Error;
+use anyhow::Error as AnyhowError;
 use mkutils::Utils;
 use reqwest::Client as ReqwestClient;
 use ulid::Ulid;
@@ -14,14 +14,14 @@ pub struct Client {
 }
 
 impl Client {
-  pub fn new(port: u16) -> Result<Self, Error> {
+  pub fn new(port: u16) -> Result<Self, AnyhowError> {
     let http_client = Self::http_client()?;
     let client = Self { http_client, port };
 
     client.ok()
   }
 
-  fn http_client() -> Result<ReqwestClient, Error> {
+  fn http_client() -> Result<ReqwestClient, AnyhowError> {
     ReqwestClient::builder().http2_prior_knowledge().build()?.ok()
   }
 
@@ -29,7 +29,7 @@ impl Client {
     std::format!("http://{url}:{port}{path}", url = Server::IPV4_ADDR, port = self.port)
   }
 
-  pub async fn new_session(&self, command: &NewSessionCommand) -> Result<NewSessionResult, Error> {
+  pub async fn new_session(&self, command: &NewSessionCommand) -> Result<NewSessionResult, AnyhowError> {
     let url = self.url(Server::PATH_NEW_SESSION);
 
     self
@@ -45,7 +45,7 @@ impl Client {
       .ok()
   }
 
-  pub async fn open_file(&self, command: &OpenFileCommand) -> Result<(), Error> {
+  pub async fn open_file(&self, command: &OpenFileCommand) -> Result<(), AnyhowError> {
     let url = self.url(Server::PATH_OPEN_FILE);
 
     self
@@ -61,7 +61,7 @@ impl Client {
       .ok()
   }
 
-  pub async fn get(&self, session_id: Option<Ulid>) -> Result<GetSessionsResult, Error> {
+  pub async fn get(&self, session_id: Option<Ulid>) -> Result<GetSessionsResult, AnyhowError> {
     let url = self.url(Server::PATH_GET_SESSIONS);
 
     self

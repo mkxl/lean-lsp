@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use anyhow::Error;
+use anyhow::Error as AnyhowError;
 use clap::Args;
 use derive_more::Constructor;
 use poem_openapi::Object;
@@ -15,7 +15,7 @@ use crate::{
 
 pub enum SessionCommand {
   OpenFile {
-    sender: OneshotSender<Result<(), Error>>,
+    sender: OneshotSender<Result<(), AnyhowError>>,
     filepath: PathBuf,
   },
   GetProcessStatus {
@@ -47,14 +47,14 @@ pub struct OpenFileCommand {
 
 pub enum SessionSetCommand {
   NewSession {
-    sender: OneshotSender<Result<Session, Error>>,
+    sender: OneshotSender<Result<Session, AnyhowError>>,
     command: NewSessionCommand,
   },
   GetSessions {
     sender: OneshotSender<Vec<Session>>,
   },
   GetSession {
-    sender: OneshotSender<Result<Session, Error>>,
+    sender: OneshotSender<Result<Session, AnyhowError>>,
     session_id: Option<Ulid>,
   },
 }

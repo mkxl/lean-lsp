@@ -3,7 +3,7 @@ use std::{
   path::{Path, PathBuf},
 };
 
-use anyhow::{Context, Error};
+use anyhow::{Context, Error as AnyhowError};
 use bytes::{Buf, BytesMut};
 use mkutils::{IntoStream, Process, Utils};
 use poem_openapi::Object;
@@ -36,7 +36,7 @@ impl LeanServerStdout {
 
   // NOTE: [https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#headerPart]
   #[tracing::instrument(skip_all)]
-  async fn next_message(&mut self) -> Result<BytesMut, Error> {
+  async fn next_message(&mut self) -> Result<BytesMut, AnyhowError> {
     let (content_begin_idx, content_length) = loop {
       if let Some((separator_begin_idx, separator_end_idx)) = self.buf.substr_interval(Self::SEPARATOR) {
         let (_space_begin_idx, space_end_idx) =
@@ -85,7 +85,7 @@ impl LeanServerProcess {
     log_dirpath: Option<&Path>,
     inputs: MpscUnboundedReceiver<Vec<u8>>,
     outputs: MpscUnboundedSender<BytesMut>,
-  ) -> Result<Self, Error> {
+  ) -> Result<Self, AnyhowError> {
     let inputs = inputs.into_stream();
     let (child, stdin, stdout, stderr) = Self::process(&project_dirpath.absolute()?, log_dirpath)?.into_parts();
     let stdout = LeanServerStdout::new(stdout);
@@ -102,7 +102,7 @@ impl LeanServerProcess {
     lean_server.ok()
   }
 
-  fn process(project_dirpath: &Path, log_dirpath: Option<&Path>) -> Result<Process, Error> {
+  fn process(project_dirpath: &Path, log_dirpath: Option<&Path>) -> Result<Process, AnyhowError> {
     let env = log_dirpath.map(|log_dirpath| Self::LOG_DIRPATH_ENV_NAME.pair(log_dirpath));
     let process = Process::new("lake", ["serve"], env, project_dirpath.some())?;
 
@@ -122,7 +122,7 @@ impl LeanServerProcess {
   }
 
   #[tracing::instrument(skip_all)]
-  pub async fn run(mut self) -> Result<(), Error> {
+  pub async fn run(mut self) -> Result<(), AnyhowError> {
     loop {
       tokio::select! {
         input_byte_str_res = self.inputs.next_item_async() => self.write_to_process(&input_byte_str_res?).await?,
@@ -143,14 +143,14 @@ pub struct LeanServer {
   inputs: MpscUnboundedSender<Vec<u8>>,
   outputs: MpscUnboundedReceiverStream<BytesMut>,
   project_dirpath: PathBuf,
-  process_handle: JoinHandle<Result<(), Error>>,
+  process_handle: JoinHandle<Result<(), AnyhowError>>,
   messages: Messages,
 }
 
 impl LeanServer {
   pub const LOG_DIRPATH_ENV_NAME: &'static str = LeanServerProcess::LOG_DIRPATH_ENV_NAME;
 
-  pub async fn new(project_dirpath: &Path, log_dirpath: Option<&Path>) -> Result<Self, Error> {
+  pub async fn new(project_dirpath: &Path, log_dirpath: Option<&Path>) -> Result<Self, AnyhowError> {
     // NOTE-97a211
     let project_dirpath = project_dirpath.absolute()?.into_owned();
     let (inputs, process_inputs) = tokio::sync::mpsc::unbounded_channel();
@@ -173,7 +173,7 @@ impl LeanServer {
     lean_server.ok()
   }
 
-  async fn init(&mut self) -> Result<(), Error> {
+  async fn init(&mut self) -> Result<(), AnyhowError> {
     let root_path = self.project_dirpath.absolute()?;
     let root_uri = root_path.to_uri()?;
     let name = root_path.file_name_ok()?.to_str_ok()?;
@@ -199,7 +199,7 @@ impl LeanServer {
     &self.messages
   }
 
-  pub fn send<T: Serialize>(&self, value: T) -> Result<(), Error> {
+  pub fn send<T: Serialize>(&self, value: T) -> Result<(), AnyhowError> {
     let json_byte_str = value.json_byte_str()?;
 
     self.inputs.send(json_byte_str)?;
@@ -209,7 +209,7 @@ impl LeanServer {
     ().ok()
   }
 
-  pub async fn recv<T: DeserializeOwned>(&mut self) -> Result<T, Error> {
+  pub async fn recv<T: DeserializeOwned>(&mut self) -> Result<T, AnyhowError> {
     self.outputs.next_item_async().await?.json_from_byte_str::<T>()?.ok()
   }
 
