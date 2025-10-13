@@ -1,6 +1,6 @@
 use std::net::Ipv4Addr;
 
-use anyhow::Error;
+use anyhow::Error as AnyhowError;
 use derive_more::From;
 use mkutils::Utils;
 use poem::{EndpointExt, Error as PoemError, Route, Server as PoemServer, listener::TcpListener, middleware::Tracing};
@@ -85,7 +85,7 @@ impl Server {
       .ok()
   }
 
-  pub async fn serve(port: u16) -> Result<(), Error> {
+  pub async fn serve(port: u16) -> Result<(), AnyhowError> {
     let listener = TcpListener::bind((Self::IPV4_ADDR, port));
     let open_api_service = OpenApiService::new(Self::default(), Self::TITLE, Self::VERSION);
     let open_api_endpoint = open_api_service.spec_yaml().into_endpoint();

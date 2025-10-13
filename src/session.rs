@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use anyhow::Error;
+use anyhow::Error as AnyhowError;
 use mkutils::Utils;
 use poem_openapi::Object;
 use serde::{Deserialize, Serialize};
@@ -25,7 +25,7 @@ impl Session {
   pub async fn new(
     lean_path: &Path,
     lean_server_log_dirpath: Option<&Path>,
-  ) -> Result<(Session, SessionRunner), Error> {
+  ) -> Result<(Session, SessionRunner), AnyhowError> {
     let id = Ulid::new();
     let (commands, runner_commands) = tokio::sync::mpsc::unbounded_channel();
     let session_runner = SessionRunner::new(id, runner_commands, lean_path, lean_server_log_dirpath).await?;
@@ -40,7 +40,7 @@ impl Session {
   }
 
   // TODO-8dffbb
-  pub async fn open_file(&self, filepath: PathBuf) -> Result<(), Error> {
+  pub async fn open_file(&self, filepath: PathBuf) -> Result<(), AnyhowError> {
     let (sender, receiver) = tokio::sync::oneshot::channel();
     let open_file_command = SessionCommand::OpenFile { sender, filepath };
 
@@ -50,7 +50,7 @@ impl Session {
   }
 
   // TODO-8dffbb
-  pub async fn status(&self) -> Result<SessionStatus, Error> {
+  pub async fn status(&self) -> Result<SessionStatus, AnyhowError> {
     let (sender, receiver) = tokio::sync::oneshot::channel();
     let get_process_status = SessionCommand::GetProcessStatus { sender };
 

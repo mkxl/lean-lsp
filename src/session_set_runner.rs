@@ -1,6 +1,6 @@
 use std::{collections::HashMap, path::Path};
 
-use anyhow::Error;
+use anyhow::Error as AnyhowError;
 use mkutils::{IntoStream, Utils};
 use tokio::{sync::mpsc::UnboundedReceiver as MpscUnboundedReceiver, task::JoinSet};
 use tokio_stream::wrappers::UnboundedReceiverStream as MpscUnboundedReceiverStream;
@@ -27,7 +27,11 @@ impl SessionSetRunner {
     }
   }
 
-  async fn new_session(&mut self, lean_path: &Path, lean_server_log_dirpath: Option<&Path>) -> Result<Session, Error> {
+  async fn new_session(
+    &mut self,
+    lean_path: &Path,
+    lean_server_log_dirpath: Option<&Path>,
+  ) -> Result<Session, AnyhowError> {
     let (session, session_runner) = Session::new(lean_path, lean_server_log_dirpath).await?;
 
     self.sessions.insert(session.id(), session.clone());
@@ -40,7 +44,7 @@ impl SessionSetRunner {
     self.sessions.values().cloned().collect()
   }
 
-  fn get_session(&self, session_id: Option<Ulid>) -> Result<Session, Error> {
+  fn get_session(&self, session_id: Option<Ulid>) -> Result<Session, AnyhowError> {
     if let Some(session_id) = session_id {
       self.sessions.try_get(&session_id)?.clone().ok()
     } else if self.sessions.len() == 1 {
@@ -51,7 +55,7 @@ impl SessionSetRunner {
   }
 
   #[tracing::instrument(skip_all)]
-  async fn process_command(&mut self, command: SessionSetCommand) -> Result<(), Error> {
+  async fn process_command(&mut self, command: SessionSetCommand) -> Result<(), AnyhowError> {
     match command {
       SessionSetCommand::NewSession { sender, command } => self
         .new_session(command.lean_path.as_ref(), command.lean_server_log_dirpath.map_as_ref())
@@ -79,7 +83,7 @@ impl SessionSetRunner {
 
   // TODO-8dffbb
   #[tracing::instrument(skip_all)]
-  pub async fn run(mut self) -> Result<(), Error> {
+  pub async fn run(mut self) -> Result<(), AnyhowError> {
     loop {
       tokio::select! {
         session_set_command_res = self.commands.next_item_async() => self.process_command(session_set_command_res?).await.log_error("error processing command").unit(),

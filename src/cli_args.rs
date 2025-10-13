@@ -1,6 +1,6 @@
 use std::io::StdoutLock;
 
-use anyhow::Error;
+use anyhow::Error as AnyhowError;
 use clap::{Args, Parser, Subcommand};
 use mkutils::{Tracing, Utils};
 use tracing_subscriber::filter::LevelFilter;
@@ -22,7 +22,7 @@ struct Get {
 }
 
 impl Get {
-  async fn run(self) -> Result<(), Error> {
+  async fn run(self) -> Result<(), AnyhowError> {
     Client::new(self.port)?
       .get(self.session_id)
       .await?
@@ -43,7 +43,7 @@ struct New {
 }
 
 impl New {
-  async fn run(self) -> Result<(), Error> {
+  async fn run(self) -> Result<(), AnyhowError> {
     Client::new(self.port)?
       .new_session(&self.command)
       .await?
@@ -63,7 +63,7 @@ struct Open {
 }
 
 impl Open {
-  async fn run(self) -> Result<(), Error> {
+  async fn run(self) -> Result<(), AnyhowError> {
     Client::new(self.port)?.open_file(&self.command).await?.ok()
   }
 }
@@ -75,7 +75,7 @@ struct Serve {
 }
 
 impl Serve {
-  async fn run(self) -> Result<(), Error> {
+  async fn run(self) -> Result<(), AnyhowError> {
     Server::serve(self.port).await
   }
 }
@@ -124,7 +124,7 @@ impl CliArgs {
       .init();
   }
 
-  async fn run_session(new_session_command: NewSessionCommand) -> Result<(), Error> {
+  async fn run_session(new_session_command: NewSessionCommand) -> Result<(), AnyhowError> {
     SessionSet::run_session(
       new_session_command.lean_path,
       new_session_command.lean_server_log_dirpath,
@@ -132,7 +132,7 @@ impl CliArgs {
     .await
   }
 
-  pub async fn run(self) -> Result<(), Error> {
+  pub async fn run(self) -> Result<(), AnyhowError> {
     self.init_tracing();
 
     match self.command {

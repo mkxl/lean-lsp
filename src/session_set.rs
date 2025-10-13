@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use anyhow::Error;
+use anyhow::Error as AnyhowError;
 use mkutils::Utils;
 use tokio::{sync::mpsc::UnboundedSender as MpscUnboundedSender, task::JoinHandle};
 use ulid::Ulid;
@@ -13,7 +13,7 @@ use crate::{
 
 pub struct SessionSet {
   commands: MpscUnboundedSender<SessionSetCommand>,
-  join_handle: JoinHandle<Result<(), Error>>,
+  join_handle: JoinHandle<Result<(), AnyhowError>>,
 }
 
 impl SessionSet {
@@ -25,7 +25,7 @@ impl SessionSet {
   }
 
   #[tracing::instrument(skip_all)]
-  pub async fn run_session(lean_path: PathBuf, lean_server_log_dirpath: Option<PathBuf>) -> Result<(), Error> {
+  pub async fn run_session(lean_path: PathBuf, lean_server_log_dirpath: Option<PathBuf>) -> Result<(), AnyhowError> {
     // NOTE: assign the result of [session_set.new_session()] to a variable to
     // prevent it from being immediately dropped and closing the associated
     // [SessionRunner] instances's commands receiver stream
@@ -41,7 +41,7 @@ impl SessionSet {
     &self,
     lean_path: PathBuf,
     lean_server_log_dirpath: Option<PathBuf>,
-  ) -> Result<Session, Error> {
+  ) -> Result<Session, AnyhowError> {
     let (sender, receiver) = tokio::sync::oneshot::channel();
     let command = NewSessionCommand::new(lean_path, lean_server_log_dirpath);
     let new_session_command = SessionSetCommand::NewSession { sender, command };
@@ -52,7 +52,7 @@ impl SessionSet {
   }
 
   // TODO-8dffbb
-  pub async fn get_sessions(&self) -> Result<Vec<Session>, Error> {
+  pub async fn get_sessions(&self) -> Result<Vec<Session>, AnyhowError> {
     let (sender, receiver) = tokio::sync::oneshot::channel();
     let get_sessions = SessionSetCommand::GetSessions { sender };
 
@@ -62,7 +62,7 @@ impl SessionSet {
   }
 
   // TODO-8dffbb
-  pub async fn get_session(&self, session_id: Option<Ulid>) -> Result<Session, Error> {
+  pub async fn get_session(&self, session_id: Option<Ulid>) -> Result<Session, AnyhowError> {
     let (sender, receiver) = tokio::sync::oneshot::channel();
     let get_session = SessionSetCommand::GetSession { sender, session_id };
 

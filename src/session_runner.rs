@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use anyhow::Error;
+use anyhow::Error as AnyhowError;
 use mkutils::{IntoStream, Utils};
 use serde_json::Value as Json;
 use tokio::sync::mpsc::UnboundedReceiver as MpscUnboundedReceiver;
@@ -11,7 +11,7 @@ use crate::{commands::SessionCommand, lean_server::LeanServer};
 
 pub struct SessionResult {
   pub id: Ulid,
-  pub result: Result<(), Error>,
+  pub result: Result<(), AnyhowError>,
 }
 
 pub struct SessionRunner {
@@ -29,7 +29,7 @@ impl SessionRunner {
     commands: MpscUnboundedReceiver<SessionCommand>,
     lean_path: &Path,
     lean_server_log_dirpath: Option<&Path>,
-  ) -> Result<Self, Error> {
+  ) -> Result<Self, AnyhowError> {
     let commands = commands.into_stream();
     let project_dirpath = Self::project_dirpath(lean_path)?;
     let lean_server = LeanServer::new(&project_dirpath, lean_server_log_dirpath).await?;
@@ -45,7 +45,7 @@ impl SessionRunner {
     session_runner.ok()
   }
 
-  fn project_dirpath(lean_path: &Path) -> Result<PathBuf, Error> {
+  fn project_dirpath(lean_path: &Path) -> Result<PathBuf, AnyhowError> {
     for ancestor_path in lean_path.ancestors() {
       let mut manifest_filepath = ancestor_path.with_file_name(Self::MANIFEST_FILE_NAME);
 
@@ -60,7 +60,7 @@ impl SessionRunner {
   }
 
   #[tracing::instrument(skip_all)]
-  async fn open_file(&mut self, filepath: &Path) -> Result<(), Error> {
+  async fn open_file(&mut self, filepath: &Path) -> Result<(), AnyhowError> {
     let uri = filepath.to_uri()?;
     let text = filepath
       .open_async()
@@ -85,7 +85,7 @@ impl SessionRunner {
   }
 
   #[tracing::instrument(skip_all)]
-  async fn process_command(&mut self, session_command: SessionCommand) -> Result<(), Error> {
+  async fn process_command(&mut self, session_command: SessionCommand) -> Result<(), AnyhowError> {
     match session_command {
       SessionCommand::OpenFile { sender, filepath } => self.open_file(&filepath).await.send_to_oneshot(sender),
       SessionCommand::GetProcessStatus { sender } => self.lean_server.process_status().send_to_oneshot(sender),
@@ -94,7 +94,7 @@ impl SessionRunner {
 
   // TODO-8dffbb
   #[tracing::instrument(skip_all)]
-  async fn result(mut self) -> Result<(), Error> {
+  async fn result(mut self) -> Result<(), AnyhowError> {
     loop {
       tokio::select! {
         session_command_res = self.commands.next_item_async() => self.process_command(session_command_res?).await?,
