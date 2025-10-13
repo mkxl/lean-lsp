@@ -4,8 +4,8 @@ use reqwest::Client as ReqwestClient;
 use ulid::Ulid;
 
 use crate::{
+  commands::{NewSessionCommand, OpenFileCommand},
   server::{GetSessionsResult, NewSessionResult, Server},
-  session_set::{NewSessionCommand, OpenFileCommand},
 };
 
 pub struct Client {
