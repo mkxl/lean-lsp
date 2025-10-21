@@ -1,4 +1,7 @@
-use std::path::{Path, PathBuf};
+use std::{
+  collections::HashMap,
+  path::{Path, PathBuf},
+};
 
 use anyhow::Error as AnyhowError;
 use mkutils::{IntoStream, Utils};
@@ -19,7 +22,11 @@ pub struct SessionRunner {
   lean_server: LeanServer,
   project_dirpath: PathBuf,
   commands: MpscUnboundedReceiverStream<SessionCommand>,
+  next_request_id: usize,
+  requests: HashMap<usize, Request>,
 }
+
+pub enum Request {}
 
 impl SessionRunner {
   const MANIFEST_FILE_NAME: &'static str = "lake-manifest.json";
@@ -38,6 +45,8 @@ impl SessionRunner {
       lean_server,
       project_dirpath,
       commands,
+      next_request_id: 0,
+      requests: HashMap::default(),
     };
 
     tracing::info!(%id, project_dirpath = %session_runner.project_dirpath.display(), "new session");
@@ -92,13 +101,30 @@ impl SessionRunner {
     }
   }
 
+  #[tracing::instrument(skip_all)]
+  async fn respond_to_request(&mut self, request: Request, _response: Json) -> Result<(), AnyhowError> {
+    match request {}
+  }
+
   // TODO-8dffbb
   #[tracing::instrument(skip_all)]
   async fn result(mut self) -> Result<(), AnyhowError> {
     loop {
       tokio::select! {
         session_command_res = self.commands.next_item_async() => self.process_command(session_command_res?).await?,
-        json_res = self.lean_server.recv::<Json>() => tracing::info!(received_message = %json_res?, "received message"),
+        json_response = self.lean_server.recv::<Json>() => {
+          let json_response = json_response?;
+
+          if let Some(request) = json_response
+            .get("id")
+            .and_then(Json::as_u64)
+            .and_then(|id| self.requests.remove(&(id as usize)))
+          {
+            self.respond_to_request(request, json_response).await?;
+          } else {
+            tracing::info!(received_message = %json_response, "received message without matching request");
+          }
+        }
       }
     }
   }
