@@ -21,7 +21,8 @@ impl Messages {
       "id": id,
       "method": method,
       "params": params,
-    }).pair(id)
+    })
+    .pair(id)
   }
 
   fn request(&self, method: &str, params: &Json) -> Json {

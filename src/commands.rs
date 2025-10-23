@@ -25,7 +25,7 @@ pub enum SessionCommand {
   GetPlainGoals {
     sender: OneshotSender<GetPlainGoalsResult>,
     command: GetPlainGoalsCommand,
-  }
+  },
 }
 
 #[derive(Args, Constructor, Deserialize, Object, Serialize)]

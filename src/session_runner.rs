@@ -6,12 +6,15 @@ use std::{
 use anyhow::Error as AnyhowError;
 use mkutils::{IntoStream, Utils};
 use serde_json::Value as Json;
+use tokio::sync::{mpsc::UnboundedReceiver as MpscUnboundedReceiver, oneshot::Sender as OneshotSender};
 use tokio_stream::wrappers::UnboundedReceiverStream as MpscUnboundedReceiverStream;
-use tokio::sync::mpsc::UnboundedReceiver as MpscUnboundedReceiver;
-use tokio::sync::oneshot::Sender as OneshotSender;
 use ulid::Ulid;
 
-use crate::{commands::{SessionCommand, GetPlainGoalsCommand}, lean_server::LeanServer, server::GetPlainGoalsResult};
+use crate::{
+  commands::{GetPlainGoalsCommand, SessionCommand},
+  lean_server::LeanServer,
+  server::GetPlainGoalsResult,
+};
 
 pub struct SessionResult {
   pub id: Ulid,
@@ -76,9 +79,16 @@ impl SessionRunner {
   }
 
   #[tracing::instrument(skip_all)]
-  async fn get_plain_goals(&mut self, sender: OneshotSender<GetPlainGoalsResult>, command: GetPlainGoalsCommand) -> Result<(), AnyhowError> {
+  async fn get_plain_goals(
+    &mut self,
+    sender: OneshotSender<GetPlainGoalsResult>,
+    command: GetPlainGoalsCommand,
+  ) -> Result<(), AnyhowError> {
     let uri = command.filepath.to_uri()?;
-    let (message, id) = self.lean_server.messages().lean_rpc_get_plain_goals(&uri, command.line, command.character);
+    let (message, id) = self
+      .lean_server
+      .messages()
+      .lean_rpc_get_plain_goals(&uri, command.line, command.character);
 
     self.register_request(id, Request::GetPlainGoals(sender));
     self.lean_server.send(message)?;
