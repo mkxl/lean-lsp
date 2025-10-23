@@ -8,7 +8,7 @@ use ulid::Ulid;
 
 use crate::{
   client::Client,
-  commands::{NewSessionCommand, OpenFileCommand},
+  commands::{GetPlainGoalsCommand, NewSessionCommand, OpenFileCommand},
   server::Server,
   session_set::SessionSet,
 };
@@ -80,6 +80,35 @@ impl Serve {
   }
 }
 
+#[derive(Args)]
+struct InfoView {
+  #[arg(long, default_value_t = Server::DEFAULT_PORT)]
+  port: u16,
+
+  session_id: Option<Ulid>,
+
+  #[command(subcommand)]
+  command: InfoViewCommand,
+}
+
+impl InfoView {
+  async fn run(self) -> Result<(), AnyhowError> {
+    match self.command {
+      InfoViewCommand::GetPlainGoals(command) => Client::new(self.port)?
+        .get_plain_goals(self.session_id, command)
+        .await?
+        .json_str()?
+        .println()
+        .ok(),
+    }
+  }
+}
+
+#[derive(Subcommand)]
+enum InfoViewCommand {
+  GetPlainGoals(GetPlainGoalsCommand),
+}
+
 #[derive(Subcommand)]
 enum Command {
   Get(Get),
@@ -87,6 +116,7 @@ enum Command {
   Open(Open),
   Run(NewSessionCommand),
   Serve(Serve),
+  InfoView(InfoView),
 }
 
 #[derive(Parser)]
@@ -141,6 +171,7 @@ impl CliArgs {
       Command::Open(open) => open.run().await,
       Command::Run(new_session_command) => Self::run_session(new_session_command).await,
       Command::Serve(serve) => serve.run().await,
+      Command::InfoView(info_view) => info_view.run().await,
     }
   }
 }

@@ -4,8 +4,8 @@ use reqwest::Client as ReqwestClient;
 use ulid::Ulid;
 
 use crate::{
-  commands::{NewSessionCommand, OpenFileCommand},
-  server::{GetSessionsResult, NewSessionResult, Server},
+  commands::{GetPlainGoalsCommand, NewSessionCommand, OpenFileCommand},
+  server::{GetPlainGoalsResult, GetSessionsResult, NewSessionResult, Server},
 };
 
 pub struct Client {
@@ -67,12 +67,35 @@ impl Client {
     self
       .http_client
       .get(url)
-      .query_once(Server::SESSION_QUERY_PARAM_NAME, session_id)
+      .query_once(Server::QUERY_PARAM_SESSION_ID, session_id)
       .send()
       .await?
       .check_status()
       .await?
       .json::<GetSessionsResult>()
+      .await?
+      .ok()
+  }
+
+  pub async fn get_plain_goals(
+    &self,
+    session_id: Option<Ulid>,
+    command: GetPlainGoalsCommand,
+  ) -> Result<GetPlainGoalsResult, AnyhowError> {
+    let url = self.url(Server::PATH_GET_PLAIN_GOALS);
+
+    self
+      .http_client
+      .get(url)
+      .query_once(Server::QUERY_PARAM_SESSION_ID, session_id)
+      .query_once(Server::QUERY_PARAM_FILEPATH, command.filepath.some())
+      .query_once(Server::QUERY_PARAM_LINE, command.line.some())
+      .query_once(Server::QUERY_PARAM_CHARACTER, command.character.some())
+      .send()
+      .await?
+      .check_status()
+      .await?
+      .json::<GetPlainGoalsResult>()
       .await?
       .ok()
   }

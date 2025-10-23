@@ -9,6 +9,7 @@ use serde_json::Value as Json;
 use tokio::sync::{mpsc::UnboundedReceiver as MpscUnboundedReceiver, oneshot::Sender as OneshotSender};
 use tokio_stream::wrappers::UnboundedReceiverStream as MpscUnboundedReceiverStream;
 use ulid::Ulid;
+use valuable::Valuable;
 
 use crate::{
   commands::{GetPlainGoalsCommand, SessionCommand},
@@ -132,13 +133,18 @@ impl SessionRunner {
 
   #[tracing::instrument(skip_all)]
   async fn handle_response(&mut self, response: Json) -> Result<(), AnyhowError> {
+    tracing::info!(received_message = response.as_value(), "received message");
+
     #[allow(clippy::cast_possible_truncation)]
     let Some(request) = response
       .get("id")
       .and_then(Json::as_u64)
       .and_then(|id| self.requests.remove(&(id as usize)))
     else {
-      tracing::warn!(received_message = %response, "received message without matching request");
+      tracing::warn!(
+        received_message = response.as_value(),
+        "received message without matching request"
+      );
 
       return ().ok();
     };

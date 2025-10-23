@@ -7,7 +7,12 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc::UnboundedSender as MpscUnboundedSender;
 use ulid::Ulid;
 
-use crate::{commands::SessionCommand, lean_server::ProcessStatus, session_runner::SessionRunner};
+use crate::{
+  commands::{GetPlainGoalsCommand, SessionCommand},
+  lean_server::ProcessStatus,
+  server::GetPlainGoalsResult,
+  session_runner::SessionRunner,
+};
 
 #[derive(Deserialize, Object, Serialize)]
 pub struct SessionStatus {
@@ -47,6 +52,26 @@ impl Session {
     self.commands.send(open_file_command)?;
 
     receiver.await?
+  }
+
+  // TODO-8dffbb
+  pub async fn get_plain_goals(
+    &self,
+    filepath: PathBuf,
+    line: usize,
+    character: usize,
+  ) -> Result<GetPlainGoalsResult, AnyhowError> {
+    let (sender, receiver) = tokio::sync::oneshot::channel();
+    let command = GetPlainGoalsCommand {
+      filepath,
+      line,
+      character,
+    };
+    let get_pain_goals_command = SessionCommand::GetPlainGoals { sender, command };
+
+    self.commands.send(get_pain_goals_command)?;
+
+    receiver.await?.ok()
   }
 
   // TODO-8dffbb
