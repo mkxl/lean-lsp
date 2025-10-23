@@ -22,7 +22,6 @@ pub struct SessionRunner {
   lean_server: LeanServer,
   project_dirpath: PathBuf,
   commands: MpscUnboundedReceiverStream<SessionCommand>,
-  next_request_id: usize,
   requests: HashMap<usize, Request>,
 }
 
@@ -45,7 +44,6 @@ impl SessionRunner {
       lean_server,
       project_dirpath,
       commands,
-      next_request_id: 0,
       requests: HashMap::default(),
     };
 
