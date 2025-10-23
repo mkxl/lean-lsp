@@ -60,7 +60,7 @@ impl SessionRunner {
 
   fn register_request(&mut self, id: usize, request: Request) {
     if self.requests.insert(id, request).is_some() {
-      tracing::warn!(%id, "registering request with existing id")
+      tracing::warn!(%id, "registering request with existing id");
     }
   }
 
@@ -132,6 +132,7 @@ impl SessionRunner {
 
   #[tracing::instrument(skip_all)]
   async fn handle_response(&mut self, response: Json) -> Result<(), AnyhowError> {
+    #[allow(clippy::cast_possible_truncation)]
     let Some(request) = response
       .get("id")
       .and_then(Json::as_u64)
