@@ -22,7 +22,6 @@ pub struct SessionRunner {
   lean_server: LeanServer,
   project_dirpath: PathBuf,
   commands: MpscUnboundedReceiverStream<SessionCommand>,
-  next_request_id: usize,
   requests: HashMap<usize, Request>,
 }
 
@@ -45,7 +44,6 @@ impl SessionRunner {
       lean_server,
       project_dirpath,
       commands,
-      next_request_id: 0,
       requests: HashMap::default(),
     };
 
@@ -102,7 +100,17 @@ impl SessionRunner {
   }
 
   #[tracing::instrument(skip_all)]
-  async fn respond_to_request(&mut self, request: Request, _response: Json) -> Result<(), AnyhowError> {
+  async fn handle_response(&mut self, response: Json) -> Result<(), AnyhowError> {
+    let Some(request) = response
+      .get("id")
+      .and_then(Json::as_u64)
+      .and_then(|id| self.requests.remove(&(id as usize)))
+    else {
+      tracing::warn!(received_message = %response, "received message without matching request");
+
+      return ().ok();
+    };
+
     match request {}
   }
 
@@ -112,19 +120,7 @@ impl SessionRunner {
     loop {
       tokio::select! {
         session_command_res = self.commands.next_item_async() => self.process_command(session_command_res?).await?,
-        json_response = self.lean_server.recv::<Json>() => {
-          let json_response = json_response?;
-
-          if let Some(request) = json_response
-            .get("id")
-            .and_then(Json::as_u64)
-            .and_then(|id| self.requests.remove(&(id as usize)))
-          {
-            self.respond_to_request(request, json_response).await?;
-          } else {
-            tracing::info!(received_message = %json_response, "received message without matching request");
-          }
-        }
+        json_response = self.lean_server.recv::<Json>() => self.handle_response(json_response?).await?,
       }
     }
   }
