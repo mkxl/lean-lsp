@@ -6,11 +6,12 @@ use std::{
 use anyhow::Error as AnyhowError;
 use mkutils::{IntoStream, Utils};
 use serde_json::Value as Json;
-use tokio::sync::mpsc::UnboundedReceiver as MpscUnboundedReceiver;
 use tokio_stream::wrappers::UnboundedReceiverStream as MpscUnboundedReceiverStream;
+use tokio::sync::mpsc::UnboundedReceiver as MpscUnboundedReceiver;
+use tokio::sync::oneshot::Sender as OneshotSender;
 use ulid::Ulid;
 
-use crate::{commands::SessionCommand, lean_server::LeanServer};
+use crate::{commands::{SessionCommand, GetPlainGoalsCommand}, lean_server::LeanServer, server::GetPlainGoalsResult};
 
 pub struct SessionResult {
   pub id: Ulid,
@@ -25,7 +26,9 @@ pub struct SessionRunner {
   requests: HashMap<usize, Request>,
 }
 
-pub enum Request {}
+pub enum Request {
+  GetPlainGoals(OneshotSender<GetPlainGoalsResult>),
+}
 
 impl SessionRunner {
   const MANIFEST_FILE_NAME: &'static str = "lake-manifest.json";
@@ -52,6 +55,12 @@ impl SessionRunner {
     session_runner.ok()
   }
 
+  fn register_request(&mut self, id: usize, request: Request) {
+    if self.requests.insert(id, request).is_some() {
+      tracing::warn!(%id, "registering request with existing id")
+    }
+  }
+
   fn project_dirpath(lean_path: &Path) -> Result<PathBuf, AnyhowError> {
     for ancestor_path in lean_path.ancestors() {
       let mut manifest_filepath = ancestor_path.with_file_name(Self::MANIFEST_FILE_NAME);
@@ -64,6 +73,17 @@ impl SessionRunner {
     }
 
     anyhow::bail!("unable to get project dirpath: no manifest file found in ancestor dirpaths");
+  }
+
+  #[tracing::instrument(skip_all)]
+  async fn get_plain_goals(&mut self, sender: OneshotSender<GetPlainGoalsResult>, command: GetPlainGoalsCommand) -> Result<(), AnyhowError> {
+    let uri = command.filepath.to_uri()?;
+    let (message, id) = self.lean_server.messages().lean_rpc_get_plain_goals(&uri, command.line, command.character);
+
+    self.register_request(id, Request::GetPlainGoals(sender));
+    self.lean_server.send(message)?;
+
+    ().ok()
   }
 
   #[tracing::instrument(skip_all)]
@@ -96,6 +116,7 @@ impl SessionRunner {
     match session_command {
       SessionCommand::OpenFile { sender, filepath } => self.open_file(&filepath).await.send_to_oneshot(sender),
       SessionCommand::GetProcessStatus { sender } => self.lean_server.process_status().send_to_oneshot(sender),
+      SessionCommand::GetPlainGoals { sender, command } => self.get_plain_goals(sender, command).await,
     }
   }
 
@@ -111,7 +132,12 @@ impl SessionRunner {
       return ().ok();
     };
 
-    match request {}
+    match request {
+      Request::GetPlainGoals(sender) => {
+        // TODO: add `to_value_from_json_value` to mkutils
+        serde_json::from_value::<GetPlainGoalsResult>(response)?.send_to_oneshot(sender)
+      }
+    }
   }
 
   // TODO-8dffbb

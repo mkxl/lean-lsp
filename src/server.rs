@@ -24,6 +24,11 @@ pub struct GetSessionsResult {
   pub sessions: Vec<SessionStatus>,
 }
 
+#[derive(Deserialize, From, Object, Serialize)]
+pub struct GetPlainGoalsResult {
+  pub plain_goals: String,
+}
+
 #[derive(Default)]
 pub struct Server {
   session_set: SessionSet,

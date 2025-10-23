@@ -10,6 +10,7 @@ use ulid::Ulid;
 
 use crate::{
   lean_server::{LeanServer, ProcessStatus},
+  server::GetPlainGoalsResult,
   session::Session,
 };
 
@@ -21,6 +22,17 @@ pub enum SessionCommand {
   GetProcessStatus {
     sender: OneshotSender<ProcessStatus>,
   },
+  GetPlainGoals {
+    sender: OneshotSender<GetPlainGoalsResult>,
+    command: GetPlainGoalsCommand,
+  }
+}
+
+#[derive(Args, Constructor, Deserialize, Object, Serialize)]
+pub struct GetPlainGoalsCommand {
+  pub filepath: PathBuf,
+  pub line: usize,
+  pub character: usize,
 }
 
 #[derive(Args, Constructor, Deserialize, Object, Serialize)]

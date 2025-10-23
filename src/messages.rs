@@ -13,13 +13,19 @@ pub struct Messages {
 }
 
 impl Messages {
-  fn request(&self, method: &str, params: &Json) -> Json {
+  fn request_with_id(&self, method: &str, params: &Json) -> (Json, usize) {
+    let id = self.id.inc();
+
     serde_json::json!({
       "jsonrpc": "2.0",
-      "id": self.id.inc(),
+      "id": id,
       "method": method,
       "params": params,
-    })
+    }).pair(id)
+  }
+
+  fn request(&self, method: &str, params: &Json) -> Json {
+    self.request_with_id(method, params).0
   }
 
   fn notification(method: &str, params: &Json) -> Json {
@@ -72,5 +78,11 @@ impl Messages {
     let params = crate::messages::lean_rpc::connect_params(uri);
 
     self.request("$/lean/rpc/connect", &params)
+  }
+
+  pub fn lean_rpc_get_plain_goals(&self, uri: &str, line: usize, character: usize) -> (Json, usize) {
+    let params = crate::messages::lean_rpc::get_plain_goals(uri, line, character);
+
+    self.request_with_id("$/lean/plainGoals", &params)
   }
 }
