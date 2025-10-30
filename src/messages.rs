@@ -82,7 +82,7 @@ impl Messages {
   }
 
   pub fn lean_rpc_get_plain_goals(&self, uri: &str, line: usize, character: usize) -> (Json, usize) {
-    let params = crate::messages::lean_rpc::get_plain_goals(uri, line, character);
+    let params = crate::messages::lean_rpc::get_plain_goals_params(uri, line, character);
 
     self.request_with_id("$/lean/plainGoal", &params)
   }

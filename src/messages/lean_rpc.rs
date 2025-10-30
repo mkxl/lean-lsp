@@ -4,7 +4,7 @@ pub fn connect_params(uri: &str) -> Json {
   serde_json::json!({"uri": uri})
 }
 
-pub fn get_plain_goals(uri: &str, line: usize, character: usize) -> Json {
+pub fn get_plain_goals_params(uri: &str, line: usize, character: usize) -> Json {
   serde_json::json!({
     "textDocument": {
       "uri": uri,

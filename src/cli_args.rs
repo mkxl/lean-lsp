@@ -85,6 +85,7 @@ struct InfoView {
   #[arg(long, default_value_t = Server::DEFAULT_PORT)]
   port: u16,
 
+  #[arg(long)]
   session_id: Option<Ulid>,
 
   #[command(subcommand)]
