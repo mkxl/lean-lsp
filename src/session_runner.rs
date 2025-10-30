@@ -150,10 +150,9 @@ impl SessionRunner {
     };
 
     match request {
-      Request::GetPlainGoals(sender) => {
-        // TODO: add `to_value_from_json_value` to mkutils
-        serde_json::from_value::<GetPlainGoalsResult>(response)?.send_to_oneshot(sender)
-      }
+      Request::GetPlainGoals(sender) => response
+        .to_value_from_value::<GetPlainGoalsResult>()?
+        .send_to_oneshot(sender),
     }
   }
 

@@ -1,6 +1,6 @@
 use std::{collections::HashMap, path::Path};
 
-use anyhow::Error as AnyhowError;
+use anyhow::{Context, Error as AnyhowError};
 use mkutils::{IntoStream, Utils};
 use tokio::{sync::mpsc::UnboundedReceiver as MpscUnboundedReceiver, task::JoinSet};
 use tokio_stream::wrappers::UnboundedReceiverStream as MpscUnboundedReceiverStream;
@@ -86,7 +86,7 @@ impl SessionSetRunner {
   pub async fn run(mut self) -> Result<(), AnyhowError> {
     loop {
       tokio::select! {
-        session_set_command_res = self.commands.next_item_async() => self.process_command(session_set_command_res?).await.log_error("error processing command").unit(),
+        session_set_command_res = self.commands.next_item_async() => self.process_command(session_set_command_res?).await.context("error processing command").log_if_error().unit(),
         session_result_res = self.session_results.join_next() => match session_result_res {
           Some(Ok(session_result)) => self.cleanup_session(session_result),
           Some(Err(join_error)) => tracing::warn!(%join_error, "session run task failed to execute to completion"),

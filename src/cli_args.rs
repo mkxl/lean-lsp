@@ -27,7 +27,7 @@ impl Get {
       .get(self.session_id)
       .await?
       .sessions
-      .json_str()?
+      .to_json_str()?
       .println()
       .ok()
   }
@@ -97,7 +97,7 @@ impl InfoView {
       InfoViewCommand::GetPlainGoals(command) => Client::new(self.port)?
         .get_plain_goals(self.session_id, command)
         .await?
-        .json_str()?
+        .to_json_str()?
         .println()
         .ok(),
     }

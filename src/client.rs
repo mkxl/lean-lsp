@@ -67,7 +67,7 @@ impl Client {
     self
       .http_client
       .get(url)
-      .query_once(Server::QUERY_PARAM_SESSION_ID, session_id)
+      .query_once::<Ulid, _>(Server::QUERY_PARAM_SESSION_ID, session_id)
       .send()
       .await?
       .check_status()
@@ -87,10 +87,10 @@ impl Client {
     self
       .http_client
       .get(url)
-      .query_once(Server::QUERY_PARAM_SESSION_ID, session_id)
-      .query_once(Server::QUERY_PARAM_FILEPATH, command.filepath.some())
-      .query_once(Server::QUERY_PARAM_LINE, command.line.some())
-      .query_once(Server::QUERY_PARAM_CHARACTER, command.character.some())
+      .query_once::<Ulid, _>(Server::QUERY_PARAM_SESSION_ID, session_id)
+      .query_once(Server::QUERY_PARAM_FILEPATH, command.filepath)
+      .query_once(Server::QUERY_PARAM_LINE, command.line)
+      .query_once(Server::QUERY_PARAM_CHARACTER, command.character)
       .send()
       .await?
       .check_status()

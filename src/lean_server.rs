@@ -200,17 +200,22 @@ impl LeanServer {
   }
 
   pub fn send<T: Serialize>(&self, value: T) -> Result<(), AnyhowError> {
-    let json_byte_str = value.json_byte_str()?;
+    let json_byte_str = value.to_json_byte_str()?;
 
     self.inputs.send(json_byte_str)?;
 
-    tracing::info!(json = value.json()?.as_value(), "sent message");
+    tracing::info!(json = value.to_json()?.as_value(), "sent message");
 
     ().ok()
   }
 
   pub async fn recv<T: DeserializeOwned>(&mut self) -> Result<T, AnyhowError> {
-    self.outputs.next_item_async().await?.json_from_byte_str::<T>()?.ok()
+    self
+      .outputs
+      .next_item_async()
+      .await?
+      .to_value_from_json_byte_str::<T>()?
+      .ok()
   }
 
   pub fn process_status(&self) -> ProcessStatus {
