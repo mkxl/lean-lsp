@@ -86,12 +86,12 @@ impl SessionRunner {
     sender: OneshotSender<GetPlainGoalsResult>,
     command: GetPlainGoalsCommand,
   ) -> Result<(), AnyhowError> {
-    let uri = command.filepath.to_uri()?;
+    let uri = command.location.filepath.to_uri()?;
     let RequestWithId { request, id } =
       self
         .lean_server
         .messages()
-        .lean_rpc_get_plain_goals(&uri, command.line, command.character);
+        .lean_rpc_get_plain_goals(&uri, command.location.line, command.location.character);
 
     self.register_request(id, Request::GetPlainGoals(sender));
     self.lean_server.send(request)?;

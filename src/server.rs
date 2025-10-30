@@ -12,6 +12,7 @@ use crate::{
   commands::{NewSessionCommand, OpenFileCommand},
   session::{Session, SessionStatus},
   session_set::SessionSet,
+  types::Location,
 };
 
 #[derive(From, Deserialize, Object, Serialize)]
@@ -108,11 +109,13 @@ impl Server {
     Query(line): Query<usize>,
     Query(character): Query<usize>,
   ) -> Result<Json<GetPlainGoalsResult>, PoemError> {
+    let location = Location::new(filepath, line, character);
+
     self
       .session_set
       .get_session(session_id)
       .await?
-      .get_plain_goals(filepath, line, character)
+      .get_plain_goals(location)
       .await?
       .poem_json()
       .ok()

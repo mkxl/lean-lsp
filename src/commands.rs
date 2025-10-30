@@ -29,7 +29,11 @@ pub enum SessionCommand {
   },
 }
 
-pub type GetPlainGoalsCommand = Location;
+#[derive(Args, Constructor)]
+pub struct GetPlainGoalsCommand {
+  #[command(flatten)]
+  pub location: Location,
+}
 
 #[derive(Args, Constructor, Deserialize, Object, Serialize)]
 pub struct NewSessionCommand {

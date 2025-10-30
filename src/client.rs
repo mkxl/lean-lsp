@@ -88,9 +88,9 @@ impl Client {
       .http_client
       .get(url)
       .query_once::<Ulid, _>(Server::QUERY_PARAM_SESSION_ID, session_id)
-      .query_once(Server::QUERY_PARAM_FILEPATH, command.filepath)
-      .query_once(Server::QUERY_PARAM_LINE, command.line)
-      .query_once(Server::QUERY_PARAM_CHARACTER, command.character)
+      .query_once(Server::QUERY_PARAM_FILEPATH, command.location.filepath)
+      .query_once(Server::QUERY_PARAM_LINE, command.location.line)
+      .query_once(Server::QUERY_PARAM_CHARACTER, command.location.character)
       .send()
       .await?
       .check_status()
