@@ -4,8 +4,9 @@ use reqwest::Client as ReqwestClient;
 use ulid::Ulid;
 
 use crate::{
-  commands::{GetPlainGoalsCommand, NewSessionCommand, OpenFileCommand},
+  commands::{NewSessionCommand, OpenFileCommand},
   server::{GetPlainGoalsResult, GetSessionsResult, NewSessionResult, Server},
+  types::Location,
 };
 
 pub struct Client {
@@ -80,7 +81,7 @@ impl Client {
   pub async fn get_plain_goals(
     &self,
     session_id: Option<Ulid>,
-    command: GetPlainGoalsCommand,
+    location: Location,
   ) -> Result<GetPlainGoalsResult, AnyhowError> {
     let url = self.url(Server::PATH_GET_PLAIN_GOALS);
 
@@ -88,9 +89,9 @@ impl Client {
       .http_client
       .get(url)
       .query_once::<Ulid, _>(Server::QUERY_PARAM_SESSION_ID, session_id)
-      .query_once(Server::QUERY_PARAM_FILEPATH, command.location.filepath)
-      .query_once(Server::QUERY_PARAM_LINE, command.location.line)
-      .query_once(Server::QUERY_PARAM_CHARACTER, command.location.character)
+      .query_once(Server::QUERY_PARAM_FILEPATH, location.filepath)
+      .query_once(Server::QUERY_PARAM_LINE, location.line)
+      .query_once(Server::QUERY_PARAM_CHARACTER, location.character)
       .send()
       .await?
       .check_status()

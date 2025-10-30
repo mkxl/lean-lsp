@@ -8,10 +8,7 @@ use tokio::sync::mpsc::UnboundedSender as MpscUnboundedSender;
 use ulid::Ulid;
 
 use crate::{
-  commands::{GetPlainGoalsCommand, SessionCommand},
-  lean_server::ProcessStatus,
-  server::GetPlainGoalsResult,
-  session_runner::SessionRunner,
+  commands::SessionCommand, lean_server::ProcessStatus, server::GetPlainGoalsResult, session_runner::SessionRunner,
   types::Location,
 };
 
@@ -58,8 +55,7 @@ impl Session {
   // TODO-8dffbb
   pub async fn get_plain_goals(&self, location: Location) -> Result<GetPlainGoalsResult, AnyhowError> {
     let (sender, receiver) = tokio::sync::oneshot::channel();
-    let command = GetPlainGoalsCommand::new(location);
-    let get_pain_goals_command = SessionCommand::GetPlainGoals { sender, command };
+    let get_pain_goals_command = SessionCommand::GetPlainGoals { sender, location };
 
     self.commands.send(get_pain_goals_command)?;
 

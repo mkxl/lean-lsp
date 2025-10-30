@@ -25,14 +25,8 @@ pub enum SessionCommand {
   },
   GetPlainGoals {
     sender: OneshotSender<GetPlainGoalsResult>,
-    command: GetPlainGoalsCommand,
+    location: Location,
   },
-}
-
-#[derive(Args, Constructor)]
-pub struct GetPlainGoalsCommand {
-  #[command(flatten)]
-  pub location: Location,
 }
 
 #[derive(Args, Constructor, Deserialize, Object, Serialize)]

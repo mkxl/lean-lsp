@@ -12,10 +12,8 @@ use ulid::Ulid;
 use valuable::Valuable;
 
 use crate::{
-  commands::{GetPlainGoalsCommand, SessionCommand},
-  lean_server::LeanServer,
-  messages::RequestWithId,
-  server::GetPlainGoalsResult,
+  commands::SessionCommand, lean_server::LeanServer, messages::RequestWithId, server::GetPlainGoalsResult,
+  types::Location,
 };
 
 pub struct SessionResult {
@@ -84,14 +82,14 @@ impl SessionRunner {
   async fn get_plain_goals(
     &mut self,
     sender: OneshotSender<GetPlainGoalsResult>,
-    command: GetPlainGoalsCommand,
+    location: Location,
   ) -> Result<(), AnyhowError> {
-    let uri = command.location.filepath.to_uri()?;
+    let uri = location.filepath.to_uri()?;
     let RequestWithId { request, id } =
       self
         .lean_server
         .messages()
-        .lean_rpc_get_plain_goals(&uri, command.location.line, command.location.character);
+        .lean_rpc_get_plain_goals(&uri, location.line, location.character);
 
     self.register_request(id, Request::GetPlainGoals(sender));
     self.lean_server.send(request)?;
@@ -129,7 +127,7 @@ impl SessionRunner {
     match session_command {
       SessionCommand::OpenFile { sender, filepath } => self.open_file(&filepath).await.send_to_oneshot(sender),
       SessionCommand::GetProcessStatus { sender } => self.lean_server.process_status().send_to_oneshot(sender),
-      SessionCommand::GetPlainGoals { sender, command } => self.get_plain_goals(sender, command).await,
+      SessionCommand::GetPlainGoals { sender, location } => self.get_plain_goals(sender, location).await,
     }
   }
 

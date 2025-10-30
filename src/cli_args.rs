@@ -8,9 +8,10 @@ use ulid::Ulid;
 
 use crate::{
   client::Client,
-  commands::{GetPlainGoalsCommand, NewSessionCommand, OpenFileCommand},
+  commands::{NewSessionCommand, OpenFileCommand},
   server::Server,
   session_set::SessionSet,
+  types::Location,
 };
 
 #[derive(Args)]
@@ -107,7 +108,7 @@ impl InfoView {
 
 #[derive(Subcommand)]
 enum InfoViewCommand {
-  GetPlainGoals(GetPlainGoalsCommand),
+  GetPlainGoals(Location),
 }
 
 #[derive(Subcommand)]
