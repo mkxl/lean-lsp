@@ -54,26 +54,26 @@ impl SessionRunner {
       requests: HashMap::default(),
     };
 
-    session_runner.init()?;
+    session_runner.initialize()?;
 
     tracing::info!(%id, project_dirpath = %session_runner.project_dirpath.display(), "new session");
 
     session_runner.ok()
   }
 
-  fn init(&mut self) -> Result<(), AnyhowError> {
+  fn register_request(&mut self, id: usize, request: Request) {
+    if self.requests.insert(id, request).is_some() {
+      tracing::warn!(%id, "registering request with existing id");
+    }
+  }
+
+  fn initialize(&mut self) -> Result<(), AnyhowError> {
     let RequestWithId { request, id } = self.lean_server.initialize_request()?;
 
     self.register_request(id, Request::Initialize);
     self.lean_server.send(request)?;
 
     ().ok()
-  }
-
-  fn register_request(&mut self, id: usize, request: Request) {
-    if self.requests.insert(id, request).is_some() {
-      tracing::warn!(%id, "registering request with existing id");
-    }
   }
 
   fn project_dirpath(lean_path: &Path) -> Result<PathBuf, AnyhowError> {
