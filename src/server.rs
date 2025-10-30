@@ -1,4 +1,4 @@
-use std::net::Ipv4Addr;
+use std::{net::Ipv4Addr, path::PathBuf};
 
 use anyhow::Error as AnyhowError;
 use derive_more::From;
@@ -12,6 +12,7 @@ use crate::{
   commands::{NewSessionCommand, OpenFileCommand},
   session::{Session, SessionStatus},
   session_set::SessionSet,
+  types::Location,
 };
 
 #[derive(From, Deserialize, Object, Serialize)]
@@ -24,6 +25,17 @@ pub struct GetSessionsResult {
   pub sessions: Vec<SessionStatus>,
 }
 
+#[derive(Deserialize, From, Object, Serialize)]
+pub struct GetPlainGoalsResult {
+  pub result: Option<PlainGoals>,
+}
+
+#[derive(Deserialize, From, Object, Serialize)]
+pub struct PlainGoals {
+  pub goals: Vec<String>,
+  pub rendered: String,
+}
+
 #[derive(Default)]
 pub struct Server {
   session_set: SessionSet,
@@ -32,11 +44,15 @@ pub struct Server {
 #[OpenApi]
 impl Server {
   pub const PATH_GET_SESSIONS: &'static str = "/session";
+  pub const PATH_GET_PLAIN_GOALS: &'static str = "/info-view/plain-goals";
   pub const PATH_NEW_SESSION: &'static str = "/session/new";
   pub const PATH_OPEN_FILE: &'static str = "/session/open";
   pub const DEFAULT_PORT: u16 = 8080;
   pub const IPV4_ADDR: Ipv4Addr = Ipv4Addr::UNSPECIFIED;
-  pub const SESSION_QUERY_PARAM_NAME: &'static str = "session_id";
+  pub const QUERY_PARAM_SESSION_ID: &'static str = "session_id";
+  pub const QUERY_PARAM_FILEPATH: &'static str = "filepath";
+  pub const QUERY_PARAM_LINE: &'static str = "line";
+  pub const QUERY_PARAM_CHARACTER: &'static str = "character";
 
   const PATH_ROOT: &'static str = "/";
   const PATH_OPEN_API: &'static str = "/openapi";
@@ -83,6 +99,26 @@ impl Server {
       .convert::<NewSessionResult>()
       .poem_json()
       .ok()
+  }
+
+  #[oai(path = "/info-view/plain-goals", method = "get")]
+  async fn get_plain_goals(
+    &self,
+    Query(session_id): Query<Option<Ulid>>,
+    Query(filepath): Query<PathBuf>,
+    Query(line): Query<usize>,
+    Query(character): Query<usize>,
+  ) -> Result<Json<GetPlainGoalsResult>, PoemError> {
+    let location = Location::new(filepath, line, character);
+    let response = self
+      .session_set
+      .get_session(session_id)
+      .await?
+      .get_plain_goals(location)
+      .await?
+      .poem_json();
+
+    response.ok()
   }
 
   pub async fn serve(port: u16) -> Result<(), AnyhowError> {

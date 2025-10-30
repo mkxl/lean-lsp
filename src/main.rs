@@ -10,6 +10,7 @@ mod session;
 mod session_runner;
 mod session_set;
 mod session_set_runner;
+mod types;
 
 use anyhow::Error as AnyhowError;
 use clap::Parser;

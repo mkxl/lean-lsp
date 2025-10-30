@@ -1,6 +1,6 @@
 use std::{collections::HashMap, path::Path};
 
-use anyhow::Error as AnyhowError;
+use anyhow::{Context, Error as AnyhowError};
 use mkutils::{IntoStream, Utils};
 use tokio::{sync::mpsc::UnboundedReceiver as MpscUnboundedReceiver, task::JoinSet};
 use tokio_stream::wrappers::UnboundedReceiverStream as MpscUnboundedReceiverStream;
@@ -27,12 +27,8 @@ impl SessionSetRunner {
     }
   }
 
-  async fn new_session(
-    &mut self,
-    lean_path: &Path,
-    lean_server_log_dirpath: Option<&Path>,
-  ) -> Result<Session, AnyhowError> {
-    let (session, session_runner) = Session::new(lean_path, lean_server_log_dirpath).await?;
+  fn new_session(&mut self, lean_path: &Path, lean_server_log_dirpath: Option<&Path>) -> Result<Session, AnyhowError> {
+    let (session, session_runner) = Session::new(lean_path, lean_server_log_dirpath)?;
 
     self.sessions.insert(session.id(), session.clone());
     self.session_results.spawn(session_runner.run());
@@ -59,7 +55,6 @@ impl SessionSetRunner {
     match command {
       SessionSetCommand::NewSession { sender, command } => self
         .new_session(command.lean_path.as_ref(), command.lean_server_log_dirpath.map_as_ref())
-        .await
         .send_to_oneshot(sender)?,
       SessionSetCommand::GetSessions { sender } => self.get_sessions().send_to_oneshot(sender)?,
       SessionSetCommand::GetSession { sender, session_id } => {
@@ -86,7 +81,7 @@ impl SessionSetRunner {
   pub async fn run(mut self) -> Result<(), AnyhowError> {
     loop {
       tokio::select! {
-        session_set_command_res = self.commands.next_item_async() => self.process_command(session_set_command_res?).await.log_error("error processing command").unit(),
+        session_set_command_res = self.commands.next_item_async() => self.process_command(session_set_command_res?).await.context("error processing command").log_if_error().unit(),
         session_result_res = self.session_results.join_next() => match session_result_res {
           Some(Ok(session_result)) => self.cleanup_session(session_result),
           Some(Err(join_error)) => tracing::warn!(%join_error, "session run task failed to execute to completion"),

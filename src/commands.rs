@@ -10,7 +10,9 @@ use ulid::Ulid;
 
 use crate::{
   lean_server::{LeanServer, ProcessStatus},
+  server::GetPlainGoalsResult,
   session::Session,
+  types::Location,
 };
 
 pub enum SessionCommand {
@@ -20,6 +22,10 @@ pub enum SessionCommand {
   },
   GetProcessStatus {
     sender: OneshotSender<ProcessStatus>,
+  },
+  GetPlainGoals {
+    sender: OneshotSender<GetPlainGoalsResult>,
+    location: Location,
   },
 }
 

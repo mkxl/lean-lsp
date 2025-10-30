@@ -11,6 +11,7 @@ use crate::{
   commands::{NewSessionCommand, OpenFileCommand},
   server::Server,
   session_set::SessionSet,
+  types::Location,
 };
 
 #[derive(Args)]
@@ -27,7 +28,7 @@ impl Get {
       .get(self.session_id)
       .await?
       .sessions
-      .json_str()?
+      .to_json_str()?
       .println()
       .ok()
   }
@@ -80,6 +81,36 @@ impl Serve {
   }
 }
 
+#[derive(Args)]
+struct InfoView {
+  #[arg(long, default_value_t = Server::DEFAULT_PORT)]
+  port: u16,
+
+  #[arg(long)]
+  session_id: Option<Ulid>,
+
+  #[command(subcommand)]
+  command: InfoViewCommand,
+}
+
+impl InfoView {
+  async fn run(self) -> Result<(), AnyhowError> {
+    match self.command {
+      InfoViewCommand::GetPlainGoals(command) => Client::new(self.port)?
+        .get_plain_goals(self.session_id, command)
+        .await?
+        .to_json_str()?
+        .println()
+        .ok(),
+    }
+  }
+}
+
+#[derive(Subcommand)]
+enum InfoViewCommand {
+  GetPlainGoals(Location),
+}
+
 #[derive(Subcommand)]
 enum Command {
   Get(Get),
@@ -87,6 +118,7 @@ enum Command {
   Open(Open),
   Run(NewSessionCommand),
   Serve(Serve),
+  InfoView(InfoView),
 }
 
 #[derive(Parser)]
@@ -141,6 +173,7 @@ impl CliArgs {
       Command::Open(open) => open.run().await,
       Command::Run(new_session_command) => Self::run_session(new_session_command).await,
       Command::Serve(serve) => serve.run().await,
+      Command::InfoView(info_view) => info_view.run().await,
     }
   }
 }

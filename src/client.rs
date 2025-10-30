@@ -5,7 +5,8 @@ use ulid::Ulid;
 
 use crate::{
   commands::{NewSessionCommand, OpenFileCommand},
-  server::{GetSessionsResult, NewSessionResult, Server},
+  server::{GetPlainGoalsResult, GetSessionsResult, NewSessionResult, Server},
+  types::Location,
 };
 
 pub struct Client {
@@ -67,12 +68,35 @@ impl Client {
     self
       .http_client
       .get(url)
-      .query_once(Server::SESSION_QUERY_PARAM_NAME, session_id)
+      .query_once::<Ulid, _>(Server::QUERY_PARAM_SESSION_ID, session_id)
       .send()
       .await?
       .check_status()
       .await?
       .json::<GetSessionsResult>()
+      .await?
+      .ok()
+  }
+
+  pub async fn get_plain_goals(
+    &self,
+    session_id: Option<Ulid>,
+    location: Location,
+  ) -> Result<GetPlainGoalsResult, AnyhowError> {
+    let url = self.url(Server::PATH_GET_PLAIN_GOALS);
+
+    self
+      .http_client
+      .get(url)
+      .query_once::<Ulid, _>(Server::QUERY_PARAM_SESSION_ID, session_id)
+      .query_once(Server::QUERY_PARAM_FILEPATH, location.filepath)
+      .query_once(Server::QUERY_PARAM_LINE, location.line)
+      .query_once(Server::QUERY_PARAM_CHARACTER, location.character)
+      .send()
+      .await?
+      .check_status()
+      .await?
+      .json::<GetPlainGoalsResult>()
       .await?
       .ok()
   }

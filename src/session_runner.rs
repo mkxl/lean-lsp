@@ -6,11 +6,15 @@ use std::{
 use anyhow::Error as AnyhowError;
 use mkutils::{IntoStream, Utils};
 use serde_json::Value as Json;
-use tokio::sync::mpsc::UnboundedReceiver as MpscUnboundedReceiver;
+use tokio::sync::{mpsc::UnboundedReceiver as MpscUnboundedReceiver, oneshot::Sender as OneshotSender};
 use tokio_stream::wrappers::UnboundedReceiverStream as MpscUnboundedReceiverStream;
 use ulid::Ulid;
+use valuable::Valuable;
 
-use crate::{commands::SessionCommand, lean_server::LeanServer};
+use crate::{
+  commands::SessionCommand, lean_server::LeanServer, messages::RequestWithId, server::GetPlainGoalsResult,
+  types::Location,
+};
 
 pub struct SessionResult {
   pub id: Ulid,
@@ -25,12 +29,15 @@ pub struct SessionRunner {
   requests: HashMap<usize, Request>,
 }
 
-pub enum Request {}
+pub enum Request {
+  Initialize,
+  GetPlainGoals(OneshotSender<GetPlainGoalsResult>),
+}
 
 impl SessionRunner {
   const MANIFEST_FILE_NAME: &'static str = "lake-manifest.json";
 
-  pub async fn new(
+  pub fn new(
     id: Ulid,
     commands: MpscUnboundedReceiver<SessionCommand>,
     lean_path: &Path,
@@ -38,8 +45,8 @@ impl SessionRunner {
   ) -> Result<Self, AnyhowError> {
     let commands = commands.into_stream();
     let project_dirpath = Self::project_dirpath(lean_path)?;
-    let lean_server = LeanServer::new(&project_dirpath, lean_server_log_dirpath).await?;
-    let session_runner = Self {
+    let lean_server = LeanServer::new(&project_dirpath, lean_server_log_dirpath)?;
+    let mut session_runner = Self {
       id,
       lean_server,
       project_dirpath,
@@ -47,9 +54,26 @@ impl SessionRunner {
       requests: HashMap::default(),
     };
 
+    session_runner.initialize()?;
+
     tracing::info!(%id, project_dirpath = %session_runner.project_dirpath.display(), "new session");
 
     session_runner.ok()
+  }
+
+  fn register_request(&mut self, id: usize, request: Request) {
+    if self.requests.insert(id, request).is_some() {
+      tracing::warn!(%id, "registering request with existing id");
+    }
+  }
+
+  fn initialize(&mut self) -> Result<(), AnyhowError> {
+    let RequestWithId { request, id } = self.lean_server.initialize_request()?;
+
+    self.register_request(id, Request::Initialize);
+    self.lean_server.send(request)?;
+
+    ().ok()
   }
 
   fn project_dirpath(lean_path: &Path) -> Result<PathBuf, AnyhowError> {
@@ -64,6 +88,25 @@ impl SessionRunner {
     }
 
     anyhow::bail!("unable to get project dirpath: no manifest file found in ancestor dirpaths");
+  }
+
+  #[tracing::instrument(skip_all)]
+  async fn get_plain_goals(
+    &mut self,
+    sender: OneshotSender<GetPlainGoalsResult>,
+    location: Location,
+  ) -> Result<(), AnyhowError> {
+    let uri = location.filepath.to_uri()?;
+    let RequestWithId { request, id } =
+      self
+        .lean_server
+        .messages()
+        .lean_rpc_get_plain_goals(&uri, location.line, location.character);
+
+    self.register_request(id, Request::GetPlainGoals(sender));
+    self.lean_server.send(request)?;
+
+    ().ok()
   }
 
   #[tracing::instrument(skip_all)]
@@ -96,22 +139,42 @@ impl SessionRunner {
     match session_command {
       SessionCommand::OpenFile { sender, filepath } => self.open_file(&filepath).await.send_to_oneshot(sender),
       SessionCommand::GetProcessStatus { sender } => self.lean_server.process_status().send_to_oneshot(sender),
+      SessionCommand::GetPlainGoals { sender, location } => self.get_plain_goals(sender, location).await,
     }
   }
 
   #[tracing::instrument(skip_all)]
   async fn handle_response(&mut self, response: Json) -> Result<(), AnyhowError> {
+    tracing::info!(received_message = response.as_value(), "received message");
+
+    #[allow(clippy::cast_possible_truncation)]
     let Some(request) = response
       .get("id")
       .and_then(Json::as_u64)
       .and_then(|id| self.requests.remove(&(id as usize)))
     else {
-      tracing::warn!(received_message = %response, "received message without matching request");
+      tracing::warn!(
+        received_message = response.as_value(),
+        "received message without matching request"
+      );
 
       return ().ok();
     };
 
-    match request {}
+    match request {
+      Request::Initialize => {
+        let initialized_notification = self.lean_server.messages().initialized_notification();
+
+        tracing::info!(response = response.as_value(), "initial lean server response");
+
+        self.lean_server.send(initialized_notification)?;
+
+        ().ok()
+      }
+      Request::GetPlainGoals(sender) => response
+        .to_value_from_value::<GetPlainGoalsResult>()?
+        .send_to_oneshot(sender),
+    }
   }
 
   // TODO-8dffbb

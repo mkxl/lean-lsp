@@ -4,6 +4,7 @@ pub mod text_document;
 
 use std::{path::Path, sync::atomic::AtomicUsize};
 
+use derive_more::Constructor;
 use mkutils::Utils;
 use serde_json::Value as Json;
 
@@ -12,14 +13,27 @@ pub struct Messages {
   id: AtomicUsize,
 }
 
+#[derive(Constructor)]
+pub struct RequestWithId {
+  pub request: Json,
+  pub id: usize,
+}
+
 impl Messages {
-  fn request(&self, method: &str, params: &Json) -> Json {
-    serde_json::json!({
+  fn request_with_id(&self, method: &str, params: &Json) -> RequestWithId {
+    let id = self.id.inc();
+    let request = serde_json::json!({
       "jsonrpc": "2.0",
-      "id": self.id.inc(),
+      "id": id,
       "method": method,
       "params": params,
-    })
+    });
+
+    RequestWithId::new(request, id)
+  }
+
+  fn request(&self, method: &str, params: &Json) -> Json {
+    self.request_with_id(method, params).request
   }
 
   fn notification(method: &str, params: &Json) -> Json {
@@ -30,10 +44,10 @@ impl Messages {
     })
   }
 
-  pub fn initialize_request(&self, root_path: &Path, root_uri: &str, name: &str) -> Json {
+  pub fn initialize_request(&self, root_path: &Path, root_uri: &str, name: &str) -> RequestWithId {
     let params = crate::messages::initialize::initialize_params(root_path, root_uri, name, std::process::id());
 
-    self.request("initialize", &params)
+    self.request_with_id("initialize", &params)
   }
 
   #[allow(clippy::unused_self)]
@@ -72,5 +86,11 @@ impl Messages {
     let params = crate::messages::lean_rpc::connect_params(uri);
 
     self.request("$/lean/rpc/connect", &params)
+  }
+
+  pub fn lean_rpc_get_plain_goals(&self, uri: &str, line: usize, character: usize) -> RequestWithId {
+    let params = crate::messages::lean_rpc::get_plain_goals_params(uri, line, character);
+
+    self.request_with_id("$/lean/plainGoal", &params)
   }
 }

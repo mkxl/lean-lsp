@@ -28,6 +28,7 @@
           packages = [
             pkgs.pkg-config
             pkgs.openssl
+            pkgs.tokio-console
 
             rust-toolchain
           ];
