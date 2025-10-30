@@ -14,6 +14,7 @@ use valuable::Valuable;
 use crate::{
   commands::{GetPlainGoalsCommand, SessionCommand},
   lean_server::LeanServer,
+  messages::RequestWithId,
   server::GetPlainGoalsResult,
 };
 
@@ -86,13 +87,14 @@ impl SessionRunner {
     command: GetPlainGoalsCommand,
   ) -> Result<(), AnyhowError> {
     let uri = command.filepath.to_uri()?;
-    let (message, id) = self
-      .lean_server
-      .messages()
-      .lean_rpc_get_plain_goals(&uri, command.line, command.character);
+    let RequestWithId { request, id } =
+      self
+        .lean_server
+        .messages()
+        .lean_rpc_get_plain_goals(&uri, command.line, command.character);
 
     self.register_request(id, Request::GetPlainGoals(sender));
-    self.lean_server.send(message)?;
+    self.lean_server.send(request)?;
 
     ().ok()
   }

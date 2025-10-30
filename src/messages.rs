@@ -4,6 +4,7 @@ pub mod text_document;
 
 use std::{path::Path, sync::atomic::AtomicUsize};
 
+use derive_more::Constructor;
 use mkutils::Utils;
 use serde_json::Value as Json;
 
@@ -12,21 +13,23 @@ pub struct Messages {
   id: AtomicUsize,
 }
 
-impl Messages {
-  fn request_with_id(&self, method: &str, params: &Json) -> (Json, usize) {
-    let id = self.id.inc();
+#[derive(Constructor)]
+pub struct RequestWithId {
+  pub request: Json,
+  pub id: usize,
+}
 
-    serde_json::json!({
+impl Messages {
+  fn request_with_id(&self, method: &str, params: &Json) -> RequestWithId {
+    let id = self.id.inc();
+    let request = serde_json::json!({
       "jsonrpc": "2.0",
       "id": id,
       "method": method,
       "params": params,
-    })
-    .pair(id)
-  }
+    });
 
-  fn request(&self, method: &str, params: &Json) -> Json {
-    self.request_with_id(method, params).0
+    RequestWithId::new(request, id)
   }
 
   fn notification(method: &str, params: &Json) -> Json {
@@ -40,7 +43,7 @@ impl Messages {
   pub fn initialize_request(&self, root_path: &Path, root_uri: &str, name: &str) -> Json {
     let params = crate::messages::initialize::initialize_params(root_path, root_uri, name, std::process::id());
 
-    self.request("initialize", &params)
+    self.request_with_id("initialize", &params).request
   }
 
   #[allow(clippy::unused_self)]
@@ -60,28 +63,28 @@ impl Messages {
   pub fn text_document_document_symbol_request(&self, uri: &str) -> Json {
     let params = crate::messages::text_document::document_symbol_params(uri);
 
-    self.request("textDocument/documentSymbol", &params)
+    self.request_with_id("textDocument/documentSymbol", &params).request
   }
 
   pub fn text_document_document_code_action_request(&self, uri: &str) -> Json {
     let params = crate::messages::text_document::document_code_action_params(uri);
 
-    self.request("textDocument/codeAction", &params)
+    self.request_with_id("textDocument/codeAction", &params).request
   }
 
   pub fn text_document_folding_range_request(&self, uri: &str) -> Json {
     let params = crate::messages::text_document::folding_range_params(uri);
 
-    self.request("textDocument/foldingRange", &params)
+    self.request_with_id("textDocument/foldingRange", &params).request
   }
 
   pub fn lean_rpc_connect_request(&self, uri: &str) -> Json {
     let params = crate::messages::lean_rpc::connect_params(uri);
 
-    self.request("$/lean/rpc/connect", &params)
+    self.request_with_id("$/lean/rpc/connect", &params).request
   }
 
-  pub fn lean_rpc_get_plain_goals(&self, uri: &str, line: usize, character: usize) -> (Json, usize) {
+  pub fn lean_rpc_get_plain_goals(&self, uri: &str, line: usize, character: usize) -> RequestWithId {
     let params = crate::messages::lean_rpc::get_plain_goals_params(uri, line, character);
 
     self.request_with_id("$/lean/plainGoal", &params)
