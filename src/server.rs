@@ -110,15 +110,15 @@ impl Server {
     Query(character): Query<usize>,
   ) -> Result<Json<GetPlainGoalsResult>, PoemError> {
     let location = Location::new(filepath, line, character);
-
-    self
+    let response = self
       .session_set
       .get_session(session_id)
       .await?
       .get_plain_goals(location)
       .await?
-      .poem_json()
-      .ok()
+      .poem_json();
+
+    response.ok()
   }
 
   pub async fn serve(port: u16) -> Result<(), AnyhowError> {
