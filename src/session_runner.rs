@@ -30,13 +30,14 @@ pub struct SessionRunner {
 }
 
 pub enum Request {
+  Initialize,
   GetPlainGoals(OneshotSender<GetPlainGoalsResult>),
 }
 
 impl SessionRunner {
   const MANIFEST_FILE_NAME: &'static str = "lake-manifest.json";
 
-  pub async fn new(
+  pub fn new(
     id: Ulid,
     commands: MpscUnboundedReceiver<SessionCommand>,
     lean_path: &Path,
@@ -44,8 +45,8 @@ impl SessionRunner {
   ) -> Result<Self, AnyhowError> {
     let commands = commands.into_stream();
     let project_dirpath = Self::project_dirpath(lean_path)?;
-    let lean_server = LeanServer::new(&project_dirpath, lean_server_log_dirpath).await?;
-    let session_runner = Self {
+    let lean_server = LeanServer::new(&project_dirpath, lean_server_log_dirpath)?;
+    let mut session_runner = Self {
       id,
       lean_server,
       project_dirpath,
@@ -53,9 +54,20 @@ impl SessionRunner {
       requests: HashMap::default(),
     };
 
+    session_runner.init()?;
+
     tracing::info!(%id, project_dirpath = %session_runner.project_dirpath.display(), "new session");
 
     session_runner.ok()
+  }
+
+  fn init(&mut self) -> Result<(), AnyhowError> {
+    let RequestWithId { request, id } = self.lean_server.initialize_request()?;
+
+    self.register_request(id, Request::Initialize);
+    self.lean_server.send(request)?;
+
+    ().ok()
   }
 
   fn register_request(&mut self, id: usize, request: Request) {
@@ -150,6 +162,15 @@ impl SessionRunner {
     };
 
     match request {
+      Request::Initialize => {
+        let initialized_notification = self.lean_server.messages().initialized_notification();
+
+        tracing::info!(response = response.as_value(), "initial lean server response");
+
+        self.lean_server.send(initialized_notification)?;
+
+        ().ok()
+      }
       Request::GetPlainGoals(sender) => response
         .to_value_from_value::<GetPlainGoalsResult>()?
         .send_to_oneshot(sender),

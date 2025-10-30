@@ -44,10 +44,10 @@ impl Messages {
     })
   }
 
-  pub fn initialize_request(&self, root_path: &Path, root_uri: &str, name: &str) -> Json {
+  pub fn initialize_request(&self, root_path: &Path, root_uri: &str, name: &str) -> RequestWithId {
     let params = crate::messages::initialize::initialize_params(root_path, root_uri, name, std::process::id());
 
-    self.request("initialize", &params)
+    self.request_with_id("initialize", &params)
   }
 
   #[allow(clippy::unused_self)]

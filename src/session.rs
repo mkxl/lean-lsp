@@ -25,13 +25,13 @@ pub struct Session {
 }
 
 impl Session {
-  pub async fn new(
+  pub fn new(
     lean_path: &Path,
     lean_server_log_dirpath: Option<&Path>,
   ) -> Result<(Session, SessionRunner), AnyhowError> {
     let id = Ulid::new();
     let (commands, runner_commands) = tokio::sync::mpsc::unbounded_channel();
-    let session_runner = SessionRunner::new(id, runner_commands, lean_path, lean_server_log_dirpath).await?;
+    let session_runner = SessionRunner::new(id, runner_commands, lean_path, lean_server_log_dirpath)?;
     let session = Session { id, commands };
     let pair = session.pair(session_runner);
 
