@@ -32,6 +32,10 @@ impl Messages {
     RequestWithId::new(request, id)
   }
 
+  fn request(&self, method: &str, params: &Json) -> Json {
+    self.request_with_id(method, params).request
+  }
+
   fn notification(method: &str, params: &Json) -> Json {
     serde_json::json!({
       "jsonrpc": "2.0",
@@ -43,7 +47,7 @@ impl Messages {
   pub fn initialize_request(&self, root_path: &Path, root_uri: &str, name: &str) -> Json {
     let params = crate::messages::initialize::initialize_params(root_path, root_uri, name, std::process::id());
 
-    self.request_with_id("initialize", &params).request
+    self.request("initialize", &params)
   }
 
   #[allow(clippy::unused_self)]
@@ -63,25 +67,25 @@ impl Messages {
   pub fn text_document_document_symbol_request(&self, uri: &str) -> Json {
     let params = crate::messages::text_document::document_symbol_params(uri);
 
-    self.request_with_id("textDocument/documentSymbol", &params).request
+    self.request("textDocument/documentSymbol", &params)
   }
 
   pub fn text_document_document_code_action_request(&self, uri: &str) -> Json {
     let params = crate::messages::text_document::document_code_action_params(uri);
 
-    self.request_with_id("textDocument/codeAction", &params).request
+    self.request("textDocument/codeAction", &params)
   }
 
   pub fn text_document_folding_range_request(&self, uri: &str) -> Json {
     let params = crate::messages::text_document::folding_range_params(uri);
 
-    self.request_with_id("textDocument/foldingRange", &params).request
+    self.request("textDocument/foldingRange", &params)
   }
 
   pub fn lean_rpc_connect_request(&self, uri: &str) -> Json {
     let params = crate::messages::lean_rpc::connect_params(uri);
 
-    self.request_with_id("$/lean/rpc/connect", &params).request
+    self.request("$/lean/rpc/connect", &params)
   }
 
   pub fn lean_rpc_get_plain_goals(&self, uri: &str, line: usize, character: usize) -> RequestWithId {
