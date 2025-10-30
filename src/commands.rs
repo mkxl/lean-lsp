@@ -12,6 +12,7 @@ use crate::{
   lean_server::{LeanServer, ProcessStatus},
   server::GetPlainGoalsResult,
   session::Session,
+  types::Location,
 };
 
 pub enum SessionCommand {
@@ -28,16 +29,7 @@ pub enum SessionCommand {
   },
 }
 
-#[derive(Args, Constructor, Deserialize, Object, Serialize)]
-pub struct GetPlainGoalsCommand {
-  pub filepath: PathBuf,
-
-  #[arg(long)]
-  pub line: usize,
-
-  #[arg(long)]
-  pub character: usize,
-}
+pub type GetPlainGoalsCommand = Location;
 
 #[derive(Args, Constructor, Deserialize, Object, Serialize)]
 pub struct NewSessionCommand {
