@@ -55,9 +55,9 @@ impl Session {
   // TODO-8dffbb
   pub async fn get_plain_goals(&self, location: Location) -> Result<GetPlainGoalsResult, AnyhowError> {
     let (sender, receiver) = tokio::sync::oneshot::channel();
-    let get_pain_goals_command = SessionCommand::GetPlainGoals { sender, location };
+    let get_plain_goals_command = SessionCommand::GetPlainGoals { sender, location };
 
-    self.commands.send(get_pain_goals_command)?;
+    self.commands.send(get_plain_goals_command)?;
 
     receiver.await?.ok()
   }
