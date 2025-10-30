@@ -31,7 +31,9 @@ pub enum SessionCommand {
 #[derive(Args, Constructor, Deserialize, Object, Serialize)]
 pub struct GetPlainGoalsCommand {
   pub filepath: PathBuf,
+  #[arg(long)]
   pub line: usize,
+  #[arg(long)]
   pub character: usize,
 }
 
