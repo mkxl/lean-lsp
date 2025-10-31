@@ -5,18 +5,20 @@ use std::{
 
 use anyhow::Error as AnyhowError;
 use mkutils::{IntoStream, Utils};
+use serde::Deserialize;
 use serde_json::Value as Json;
 use strum::Display;
 use tokio::sync::{mpsc::UnboundedReceiver as MpscUnboundedReceiver, oneshot::Sender as OneshotSender};
 use tokio_stream::wrappers::UnboundedReceiverStream as MpscUnboundedReceiverStream;
 use ulid::Ulid;
-use valuable::Valuable;
 
 use crate::{
   commands::SessionCommand,
   lean_server::LeanServer,
   messages::Request as RequestMessage,
   types::{GetPlainGoalsResult, Location, SessionStatus},
+  to_value::ToValue,
+  types::Location,
 };
 
 #[derive(Display)]
@@ -39,7 +41,8 @@ pub struct SessionRunner {
   lean_server: LeanServer,
   project_dirpath: PathBuf,
   commands: MpscUnboundedReceiverStream<SessionCommand>,
-  requests: HashMap<usize, Request>,
+  requests: HashMap<Ulid, Request>,
+  notifications: Vec<Json>,
 }
 
 impl SessionRunner {
@@ -55,12 +58,14 @@ impl SessionRunner {
     let project_dirpath = Self::project_dirpath(lean_path)?;
     let lean_server = LeanServer::new(&project_dirpath, lean_server_log_dirpath)?;
     let requests = HashMap::default();
+    let notifications = Vec::default();
     let session_runner = Self {
       id,
       lean_server,
       project_dirpath,
       commands,
       requests,
+      notifications,
     };
 
     tracing::info!(%id, project_dirpath = %session_runner.project_dirpath.display(), "new session");
@@ -197,6 +202,16 @@ impl SessionRunner {
     ().ok()
   }
 
+  fn handle_request(&mut self, _id: usize, request: Json) {
+    tracing::warn!(request = request.to_value(), "received request");
+  }
+
+  fn handle_notification(&mut self, notification: Json) {
+    tracing::warn!(notification = notification.to_value(), "received notification");
+
+    self.notifications.push(notification);
+  }
+
   // TODO-8dffbb
   #[tracing::instrument(skip_all)]
   async fn result(mut self) -> Result<(), AnyhowError> {
@@ -204,8 +219,17 @@ impl SessionRunner {
       tokio::select! {
         session_command_res = self.commands.next_item_async() => self.process_command(session_command_res?).await?,
         json_response_res = self.lean_server.recv::<Json>() => self.process_response(&json_response_res?)?,
+        server_message = self.lean_server.recv::<Json>() => self.handle_message(server_message?).await?,
       }
     }
+  }
+
+  pub fn id(&self) -> Ulid {
+    self.id
+  }
+
+  pub fn take_notifications(&mut self) -> Vec<Json> {
+    std::mem::take(&mut self.notifications)
   }
 
   pub async fn run(self) -> SessionResult {

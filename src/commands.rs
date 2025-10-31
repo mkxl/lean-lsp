@@ -5,12 +5,14 @@ use clap::Args;
 use derive_more::Constructor;
 use poem_openapi::Object;
 use serde::{Deserialize, Serialize};
+use serde_json::Value as Json;
 use tokio::sync::oneshot::Sender as OneshotSender;
 use ulid::Ulid;
 
 use crate::{
   lean_server::LeanServer,
   session::Session,
+  server::GetNotificationsResult,
   types::{GetPlainGoalsResult, Location, SessionStatus},
 };
 
@@ -28,6 +30,9 @@ pub enum SessionCommand {
   },
   GetStatus {
     sender: OneshotSender<SessionStatus>,
+  }
+  GetNotifications {
+    sender: OneshotSender<GetNotificationsResult>,
   },
 }
 

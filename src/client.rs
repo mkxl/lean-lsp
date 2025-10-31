@@ -5,7 +5,7 @@ use ulid::Ulid;
 
 use crate::{
   commands::{NewSessionCommand, OpenFileCommand},
-  server::{GetSessionsResult, NewSessionResult, Server},
+  server::{GetNotificationsResult, GetSessionsResult, NewSessionResult, Server},
   types::{GetPlainGoalsResult, Location, SessionSetStatus},
 };
 
@@ -58,6 +58,22 @@ impl Client {
       .check_status()
       .await?
       .json::<()>()
+      .await?
+      .ok()
+  }
+
+  pub async fn notifications(&self, session_id: Option<Ulid>) -> Result<GetNotificationsResult, AnyhowError> {
+    let url = self.url(Server::PATH_GET_NOTIFICATIONS);
+
+    self
+      .http_client
+      .get(url)
+      .query_once::<Ulid, _>(Server::QUERY_PARAM_SESSION_ID, session_id)
+      .send()
+      .await?
+      .check_status()
+      .await?
+      .json::<GetNotificationsResult>()
       .await?
       .ok()
   }

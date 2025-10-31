@@ -2,6 +2,9 @@ use std::path::{Path, PathBuf};
 
 use anyhow::Error as AnyhowError;
 use mkutils::Utils;
+use poem_openapi::Object;
+use serde::{Deserialize, Serialize};
+use serde_json::Value as Json;
 use tokio::sync::mpsc::UnboundedSender as MpscUnboundedSender;
 use ulid::Ulid;
 
@@ -71,6 +74,16 @@ impl Session {
     let get_process_status = SessionCommand::GetStatus { sender };
 
     self.commands.send(get_process_status)?;
+
+    receiver.await?.ok()
+  }
+
+  // TODO-8dffbb
+  pub async fn notifications(&self) -> Result<Vec<Json>, AnyhowError> {
+    let (sender, receiver) = tokio::sync::oneshot::channel();
+    let get_notifications_command = SessionCommand::GetNotifications { sender };
+
+    self.commands.send(get_notifications_command)?;
 
     receiver.await?.ok()
   }

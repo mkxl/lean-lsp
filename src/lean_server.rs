@@ -155,7 +155,7 @@ impl LeanServer {
     let process_handle = LeanServerProcess::new(&project_dirpath, log_dirpath, process_inputs, process_outputs)?
       .run()
       .spawn_task();
-    let messages = Messages::default();
+    let messages = Messages;
     let lean_server = Self {
       inputs,
       outputs,

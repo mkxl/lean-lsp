@@ -69,6 +69,21 @@ impl Open {
 }
 
 #[derive(Args)]
+struct Notifications {
+  #[arg(long, default_value_t = Server::DEFAULT_PORT)]
+  port: u16,
+
+  #[arg(long)]
+  session_id: Option<Ulid>,
+}
+
+impl Notifications {
+  async fn run(self) -> Result<(), AnyhowError> {
+    Client::new(self.port)?.notifications(self.session_id).await?.to_json_str()?.println().ok()
+  }
+}
+
+#[derive(Args)]
 struct Serve {
   #[arg(long, default_value_t = Server::DEFAULT_PORT)]
   port: u16,
@@ -127,6 +142,7 @@ enum Command {
   Get(Get),
   New(New),
   Open(Open),
+  Notifications(Notifications),
   Serve(Serve),
   InfoView(InfoView),
   Status(Status),
@@ -174,6 +190,7 @@ impl CliArgs {
       Command::Get(get) => get.run().await,
       Command::New(new) => new.run().await,
       Command::Open(open) => open.run().await,
+      Command::Notifications(notifications) => notifications.run().await,
       Command::Serve(serve) => serve.run().await,
       Command::InfoView(info_view) => info_view.run().await,
       Command::Status(status) => status.run().await,

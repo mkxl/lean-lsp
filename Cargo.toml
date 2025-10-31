@@ -14,7 +14,7 @@ poem = { git = "https://github.com/poem-web/poem", version = "3.1.12", features 
 poem-openapi = { git = "https://github.com/poem-web/poem", version = "5.1.16", features = ["ulid", "websocket"], branch = "master" }
 reqwest = { version = "0.12.23", features = ["json"] }
 serde = { version = "1.0.226", features = ["derive"] }
-serde_json = { git = "https://github.com/mkxl/serde-json", version = "1.0.144" }
+serde_json = "1.0.145"
 strum = { version = "0.27.2", features = ["derive"] }
 tokio = { version = "1.47.1", features = ["macros", "rt-multi-thread", "process"] }
 tokio-stream = "0.1.17"

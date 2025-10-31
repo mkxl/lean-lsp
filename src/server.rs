@@ -6,6 +6,7 @@ use mkutils::Utils;
 use poem::{EndpointExt, Error as PoemError, Route, Server as PoemServer, listener::TcpListener, middleware::Tracing};
 use poem_openapi::{Object, OpenApi, OpenApiService, param::Query, payload::Json};
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use ulid::Ulid;
 
 use crate::{
@@ -25,6 +26,11 @@ pub struct GetSessionsResult {
   pub sessions: Vec<SessionStatus>,
 }
 
+#[derive(Deserialize, From, Object, Serialize)]
+pub struct GetNotificationsResult {
+  pub notifications: Vec<Value>,
+}
+
 #[derive(Default)]
 pub struct Server {
   session_set: SessionSet,
@@ -34,7 +40,9 @@ pub struct Server {
 impl Server {
   pub const DEFAULT_PORT: u16 = 8080;
   pub const IPV4_ADDR: Ipv4Addr = Ipv4Addr::UNSPECIFIED;
+  pub const PATH_GET_NOTIFICATIONS: &'static str = "/session/notifications";
   pub const PATH_GET_PLAIN_GOALS: &'static str = "/info-view/plain-goals";
+  pub const PATH_GET_PLAIN_GOALS: &'static str = "/session/info-view/plain-goals";
   pub const PATH_GET_SESSIONS: &'static str = "/session";
   pub const PATH_GET_STATUS: &'static str = "/status";
   pub const PATH_NEW_SESSION: &'static str = "/session/new";
@@ -97,7 +105,20 @@ impl Server {
       .ok()
   }
 
-  #[oai(path = "/info-view/plain-goals", method = "get")]
+  #[oai(path = "/session/notifications", method = "get")]
+  async fn notifications(&self, Query(session_id): Query<Option<Ulid>>) -> Result<Json<GetNotificationsResult>, PoemError> {
+    self
+      .session_set
+      .get_session(session_id)
+      .await?
+      .notifications()
+      .await?
+      .convert::<GetNotificationsResult>()
+      .poem_json()
+      .ok()
+  }
+
+  #[oai(path = "/session/info-view/plain-goals", method = "get")]
   async fn get_plain_goals(
     &self,
     Query(session_id): Query<Option<Ulid>>,
