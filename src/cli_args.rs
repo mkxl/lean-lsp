@@ -9,7 +9,7 @@ use ulid::Ulid;
 
 use crate::{
   client::Client,
-  commands::{CloseFileCommand, NewSessionCommand, OpenFileCommand},
+  commands::{ChangeFileCommand, CloseFileCommand, NewSessionCommand, OpenFileCommand},
   server::Server,
   types::Location,
 };
@@ -69,6 +69,7 @@ impl File {
 
     match self.command {
       FileCommand::Open(open_command) => client.open_file(&open_command).await?.ok(),
+      FileCommand::Change(change_command) => client.change_file(change_command).await?.ok(),
       FileCommand::Close(close_command) => client.close_file(&close_command).await?.ok(),
     }
   }
@@ -77,6 +78,7 @@ impl File {
 #[derive(Subcommand)]
 enum FileCommand {
   Open(OpenFileCommand),
+  Change(ChangeFileCommand),
   Close(CloseFileCommand),
 }
 

@@ -64,6 +64,13 @@ impl Message {
   }
 
   #[allow(clippy::unused_self)]
+  pub fn text_document_did_change_notification(text: &str, uri: &str, version: usize) -> Json {
+    let params = crate::messages::text_document::did_change_notification_params(text, uri, version);
+
+    Self::notification("textDocument/didChange", &params)
+  }
+
+  #[allow(clippy::unused_self)]
   pub fn text_document_did_close_notification(uri: &str) -> Json {
     let params = crate::messages::text_document::did_close_notification_params(uri);
 

@@ -73,6 +73,16 @@ impl Session {
   }
 
   // TODO-8dffbb
+  pub async fn change_file(&self, filepath: PathBuf, text: String) -> Result<(), AnyhowError> {
+    let (sender, receiver) = tokio::sync::oneshot::channel();
+    let change_file_command = SessionCommand::ChangeFile { sender, filepath, text };
+
+    self.commands.send(change_file_command)?;
+
+    receiver.await?
+  }
+
+  // TODO-8dffbb
   pub async fn close_file(&self, filepath: PathBuf) -> Result<(), AnyhowError> {
     let (sender, receiver) = tokio::sync::oneshot::channel();
     let close_file_command = SessionCommand::CloseFile { sender, filepath };
