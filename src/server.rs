@@ -4,9 +4,9 @@ use anyhow::Error as AnyhowError;
 use derive_more::From;
 use mkutils::Utils;
 use poem::{EndpointExt, Error as PoemError, Route, Server as PoemServer, listener::TcpListener, middleware::Tracing};
-use poem_openapi::{Object, OpenApi, OpenApiService, param::Query, payload::Json};
+use poem_openapi::{Object, OpenApi, OpenApiService, param::Query, payload::Json as PoemJson};
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::Value as Json;
 use ulid::Ulid;
 
 use crate::{
@@ -28,7 +28,7 @@ pub struct GetSessionsResult {
 
 #[derive(Deserialize, From, Object, Serialize)]
 pub struct GetNotificationsResult {
-  pub notifications: Vec<Value>,
+  pub notifications: Vec<Json>,
 }
 
 #[derive(Default)]
@@ -58,12 +58,15 @@ impl Server {
 
   #[oai(path = "/status", method = "get")]
   #[allow(clippy::unused_async)]
-  async fn get(&self) -> Result<Json<SessionSetStatus>, PoemError> {
+  async fn get(&self) -> Result<PoemJson<SessionSetStatus>, PoemError> {
     self.session_set.status().await?.poem_json().ok()
   }
 
   #[oai(path = "/session", method = "get")]
-  async fn get_sessions(&self, Query(session_id): Query<Option<Ulid>>) -> Result<Json<GetSessionsResult>, PoemError> {
+  async fn get_sessions(
+    &self,
+    Query(session_id): Query<Option<Ulid>>,
+  ) -> Result<PoemJson<GetSessionsResult>, PoemError> {
     let sessions = if session_id.is_some() {
       self.session_set.get_session(session_id).await?.once().collect()
     } else {
@@ -81,7 +84,10 @@ impl Server {
   }
 
   #[oai(path = "/session/new", method = "post")]
-  async fn new_session(&self, Json(command): Json<NewSessionCommand>) -> Result<Json<NewSessionResult>, PoemError> {
+  async fn new_session(
+    &self,
+    PoemJson(command): PoemJson<NewSessionCommand>,
+  ) -> Result<PoemJson<NewSessionResult>, PoemError> {
     let session = self
       .session_set
       .new_session(command.lean_path, command.lean_server_log_dirpath)
@@ -93,7 +99,7 @@ impl Server {
   }
 
   #[oai(path = "/session/open", method = "post")]
-  async fn open_file(&self, Json(command): Json<OpenFileCommand>) -> Result<Json<()>, PoemError> {
+  async fn open_file(&self, PoemJson(command): PoemJson<OpenFileCommand>) -> Result<PoemJson<()>, PoemError> {
     self
       .session_set
       .get_session(command.session_id)
@@ -108,7 +114,7 @@ impl Server {
   async fn notifications(
     &self,
     Query(session_id): Query<Option<Ulid>>,
-  ) -> Result<Json<GetNotificationsResult>, PoemError> {
+  ) -> Result<PoemJson<GetNotificationsResult>, PoemError> {
     self
       .session_set
       .get_session(session_id)
@@ -127,7 +133,7 @@ impl Server {
     Query(filepath): Query<PathBuf>,
     Query(line): Query<usize>,
     Query(character): Query<usize>,
-  ) -> Result<Json<GetPlainGoalsResult>, PoemError> {
+  ) -> Result<PoemJson<GetPlainGoalsResult>, PoemError> {
     let location = Location::new(filepath, line, character);
     let response = self
       .session_set

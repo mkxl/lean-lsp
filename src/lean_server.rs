@@ -15,10 +15,7 @@ use tokio::{
 };
 use tokio_stream::wrappers::{LinesStream, UnboundedReceiverStream as MpscUnboundedReceiverStream};
 
-use crate::{
-  messages::{Messages, Request},
-  types::TaskStatus,
-};
+use crate::{messages::Message, types::TaskStatus};
 
 struct LeanServerStdout {
   buf: BytesMut,
@@ -139,7 +136,6 @@ pub struct LeanServer {
   outputs: MpscUnboundedReceiverStream<BytesMut>,
   project_dirpath: PathBuf,
   process_handle: JoinHandle<Result<(), AnyhowError>>,
-  messages: Messages,
 }
 
 impl LeanServer {
@@ -154,29 +150,23 @@ impl LeanServer {
     let process_handle = LeanServerProcess::new(&project_dirpath, log_dirpath, process_inputs, process_outputs)?
       .run()
       .spawn_task();
-    let messages = Messages;
     let lean_server = Self {
       inputs,
       outputs,
       project_dirpath,
       process_handle,
-      messages,
     };
 
     lean_server.ok()
   }
 
-  pub fn initialize_request(&mut self) -> Result<Request, AnyhowError> {
+  pub fn initialize_request(&mut self) -> Result<Message, AnyhowError> {
     let root_path = self.project_dirpath.absolute()?;
     let root_uri = root_path.to_uri()?;
     let name = root_path.file_name_ok()?.to_str_ok()?;
-    let initialize_request = self.messages.initialize_request(&root_path, &root_uri, name);
+    let initialize_request = Message::initialize_request(&root_path, &root_uri, name);
 
     initialize_request.ok()
-  }
-
-  pub fn messages(&self) -> &Messages {
-    &self.messages
   }
 
   pub fn send<T: Serialize>(&self, value: T) -> Result<(), AnyhowError> {
