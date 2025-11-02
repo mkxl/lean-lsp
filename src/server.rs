@@ -1,35 +1,20 @@
+pub mod responses;
+
 use std::{net::Ipv4Addr, path::PathBuf};
 
 use anyhow::Error as AnyhowError;
-use derive_more::From;
 use mkutils::Utils;
 use poem::{EndpointExt, Error as PoemError, Route, Server as PoemServer, listener::TcpListener, middleware::Tracing};
-use poem_openapi::{Object, OpenApi, OpenApiService, param::Query, payload::Json as PoemJson};
-use serde::{Deserialize, Serialize};
-use serde_json::Value as Json;
+use poem_openapi::{OpenApi, OpenApiService, param::Query, payload::Json as PoemJson};
 use ulid::Ulid;
 
 use crate::{
-  commands::{NewSessionCommand, OpenFileCommand},
+  commands::{CloseFileCommand, NewSessionCommand, OpenFileCommand},
+  server::responses::{GetNotificationsResponse, GetPlainGoalsResponse, GetSessionsResponse, NewSessionResponse},
   session::Session,
   session_set::SessionSet,
-  types::{GetPlainGoalsResult, Location, SessionSetStatus, SessionStatus},
+  types::{Location, SessionSetStatus},
 };
-
-#[derive(From, Deserialize, Object, Serialize)]
-pub struct NewSessionResult {
-  pub session_id: Ulid,
-}
-
-#[derive(Deserialize, From, Object)]
-pub struct GetSessionsResult {
-  pub sessions: Vec<SessionStatus>,
-}
-
-#[derive(Deserialize, From, Object, Serialize)]
-pub struct GetNotificationsResult {
-  pub notifications: Vec<Json>,
-}
 
 #[derive(Default)]
 pub struct Server {
@@ -40,12 +25,13 @@ pub struct Server {
 impl Server {
   pub const DEFAULT_PORT: u16 = 8080;
   pub const IPV4_ADDR: Ipv4Addr = Ipv4Addr::UNSPECIFIED;
+  pub const PATH_FILE_CLOSE: &'static str = "/session/file/close";
+  pub const PATH_FILE_OPEN: &'static str = "/session/file/open";
   pub const PATH_GET_NOTIFICATIONS: &'static str = "/session/notifications";
   pub const PATH_GET_PLAIN_GOALS: &'static str = "/session/info-view/plain-goals";
   pub const PATH_GET_SESSIONS: &'static str = "/session";
   pub const PATH_GET_STATUS: &'static str = "/status";
   pub const PATH_NEW_SESSION: &'static str = "/session/new";
-  pub const PATH_OPEN_FILE: &'static str = "/session/open";
   pub const QUERY_PARAM_CHARACTER: &'static str = "character";
   pub const QUERY_PARAM_FILEPATH: &'static str = "filepath";
   pub const QUERY_PARAM_LINE: &'static str = "line";
@@ -66,7 +52,7 @@ impl Server {
   async fn get_sessions(
     &self,
     Query(session_id): Query<Option<Ulid>>,
-  ) -> Result<PoemJson<GetSessionsResult>, PoemError> {
+  ) -> Result<PoemJson<GetSessionsResponse>, PoemError> {
     let sessions = if session_id.is_some() {
       self.session_set.get_session(session_id).await?.once().collect()
     } else {
@@ -78,7 +64,7 @@ impl Server {
       .map(Session::status)
       .try_join_all()
       .await?
-      .convert::<GetSessionsResult>()
+      .convert::<GetSessionsResponse>()
       .poem_json()
       .ok()
   }
@@ -87,7 +73,7 @@ impl Server {
   async fn new_session(
     &self,
     PoemJson(command): PoemJson<NewSessionCommand>,
-  ) -> Result<PoemJson<NewSessionResult>, PoemError> {
+  ) -> Result<PoemJson<NewSessionResponse>, PoemError> {
     let session = self
       .session_set
       .new_session(command.lean_path, command.lean_server_log_dirpath)
@@ -95,10 +81,10 @@ impl Server {
 
     session.initialize().await?;
 
-    session.id().convert::<NewSessionResult>().poem_json().ok()
+    session.id().convert::<NewSessionResponse>().poem_json().ok()
   }
 
-  #[oai(path = "/session/open", method = "post")]
+  #[oai(path = "/session/file/open", method = "post")]
   async fn open_file(&self, PoemJson(command): PoemJson<OpenFileCommand>) -> Result<PoemJson<()>, PoemError> {
     self
       .session_set
@@ -110,18 +96,30 @@ impl Server {
       .ok()
   }
 
+  #[oai(path = "/session/file/close", method = "post")]
+  async fn close_file(&self, PoemJson(command): PoemJson<CloseFileCommand>) -> Result<PoemJson<()>, PoemError> {
+    self
+      .session_set
+      .get_session(command.session_id)
+      .await?
+      .close_file(command.lean_filepath)
+      .await?
+      .poem_json()
+      .ok()
+  }
+
   #[oai(path = "/session/notifications", method = "get")]
   async fn notifications(
     &self,
     Query(session_id): Query<Option<Ulid>>,
-  ) -> Result<PoemJson<GetNotificationsResult>, PoemError> {
+  ) -> Result<PoemJson<GetNotificationsResponse>, PoemError> {
     self
       .session_set
       .get_session(session_id)
       .await?
       .notifications()
       .await?
-      .convert::<GetNotificationsResult>()
+      .convert::<GetNotificationsResponse>()
       .poem_json()
       .ok()
   }
@@ -133,7 +131,7 @@ impl Server {
     Query(filepath): Query<PathBuf>,
     Query(line): Query<usize>,
     Query(character): Query<usize>,
-  ) -> Result<PoemJson<GetPlainGoalsResult>, PoemError> {
+  ) -> Result<PoemJson<GetPlainGoalsResponse>, PoemError> {
     let location = Location::new(filepath, line, character);
     let response = self
       .session_set

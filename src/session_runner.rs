@@ -15,14 +15,14 @@ use crate::{
   commands::SessionCommand,
   lean_server::LeanServer,
   messages::{Id, Message},
-  server::GetNotificationsResult,
-  types::{GetPlainGoalsResult, Location, SessionStatus},
+  server::responses::{GetNotificationsResponse, GetPlainGoalsResponse},
+  types::{Location, SessionStatus},
 };
 
 #[derive(Display)]
 enum Request {
   Initialize(OneshotSender<()>),
-  GetPlainGoals(OneshotSender<GetPlainGoalsResult>),
+  GetPlainGoals(OneshotSender<GetPlainGoalsResponse>),
   TextDocumentDocumentSymbol,
   TextDocumentDocumentCodeAction,
   TextDocumentFoldingRange,
@@ -41,6 +41,7 @@ pub struct SessionRunner {
   commands: MpscUnboundedReceiverStream<SessionCommand>,
   requests: HashMap<Id, Request>,
   notifications: Vec<Json>,
+  open_file_versions: HashMap<PathBuf, usize>,
 }
 
 impl SessionRunner {
@@ -57,6 +58,7 @@ impl SessionRunner {
     let lean_server = LeanServer::new(&project_dirpath, lean_server_log_dirpath)?;
     let requests = HashMap::default();
     let notifications = Vec::default();
+    let open_file_versions = HashMap::new();
     let session_runner = Self {
       id,
       lean_server,
@@ -64,6 +66,7 @@ impl SessionRunner {
       commands,
       requests,
       notifications,
+      open_file_versions,
     };
 
     tracing::info!(%id, project_dirpath = %session_runner.project_dirpath.display(), "new session");
@@ -86,7 +89,7 @@ impl SessionRunner {
   }
 
   fn send_request(&mut self, request_message: Message, request: Request) -> Result<(), AnyhowError> {
-    if self.requests.insert(request_message.id, request).is_some() {
+    if self.requests.insert(request_message.id.clone(), request).is_some() {
       tracing::warn!(id = %request_message.id, "registering request with existing id");
     }
 
@@ -101,7 +104,11 @@ impl SessionRunner {
   }
 
   #[tracing::instrument(skip_all)]
-  async fn open_file(&mut self, filepath: &Path) -> Result<(), AnyhowError> {
+  async fn open_file(&mut self, filepath: PathBuf) -> Result<(), AnyhowError> {
+    if self.open_file_versions.contains_key(&filepath) {
+      anyhow::bail!("file {} is already open", filepath.display());
+    }
+
     let uri = filepath.to_uri()?;
     let text = filepath
       .open_async()
@@ -127,13 +134,31 @@ impl SessionRunner {
     self.send_request(text_document_folding_range_request, Request::TextDocumentFoldingRange)?;
     self.send_request(lean_rpc_connect_request, Request::LeanRpcConnect)?;
 
+    self.open_file_versions.insert(filepath, 0);
+
+    ().ok()
+  }
+
+  #[tracing::instrument(skip_all)]
+  fn close_file(&mut self, filepath: &Path) -> Result<(), AnyhowError> {
+    if !self.open_file_versions.contains_key(filepath) {
+      anyhow::bail!("file {} is not open", filepath.display());
+    }
+
+    let uri = filepath.to_uri()?;
+    let text_document_did_close_notification = Message::text_document_did_close_notification(&uri);
+
+    self.lean_server.send(text_document_did_close_notification)?;
+
+    self.open_file_versions.remove(filepath);
+
     ().ok()
   }
 
   #[tracing::instrument(skip_all)]
   fn get_plain_goals(
     &mut self,
-    sender: OneshotSender<GetPlainGoalsResult>,
+    sender: OneshotSender<GetPlainGoalsResponse>,
     location: &Location,
   ) -> Result<(), AnyhowError> {
     let uri = location.filepath.to_uri()?;
@@ -150,15 +175,16 @@ impl SessionRunner {
     SessionStatus { id, process }
   }
 
-  pub fn get_notifications(&mut self) -> GetNotificationsResult {
-    self.notifications.mem_take().convert::<GetNotificationsResult>()
+  pub fn get_notifications(&mut self) -> GetNotificationsResponse {
+    self.notifications.mem_take().convert::<GetNotificationsResponse>()
   }
 
   #[tracing::instrument(skip_all)]
   async fn process_command(&mut self, session_command: SessionCommand) -> Result<(), AnyhowError> {
     match session_command {
       SessionCommand::Initialize { sender } => self.initialize(sender),
-      SessionCommand::OpenFile { sender, filepath } => self.open_file(&filepath).await.send_to_oneshot(sender),
+      SessionCommand::OpenFile { sender, filepath } => self.open_file(filepath).await.send_to_oneshot(sender),
+      SessionCommand::CloseFile { sender, filepath } => self.close_file(&filepath).send_to_oneshot(sender),
       SessionCommand::GetPlainGoals { sender, location } => self.get_plain_goals(sender, &location),
       SessionCommand::GetStatus { sender } => self.get_status().send_to_oneshot(sender),
       SessionCommand::GetNotifications { sender } => self.get_notifications().send_to_oneshot(sender),
@@ -176,7 +202,7 @@ impl SessionRunner {
         self.lean_server.send(notification)?;
       }
       Request::GetPlainGoals(sender) => response
-        .to_value_from_value::<GetPlainGoalsResult>()?
+        .to_value_from_value::<GetPlainGoalsResponse>()?
         .send_to_oneshot(sender)?,
       _ => (),
     }

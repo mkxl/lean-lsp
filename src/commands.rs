@@ -10,9 +10,9 @@ use ulid::Ulid;
 
 use crate::{
   lean_server::LeanServer,
-  server::GetNotificationsResult,
+  server::responses::{GetNotificationsResponse, GetPlainGoalsResponse},
   session::Session,
-  types::{GetPlainGoalsResult, Location, SessionStatus},
+  types::{Location, SessionStatus},
 };
 
 pub enum SessionCommand {
@@ -23,15 +23,19 @@ pub enum SessionCommand {
     sender: OneshotSender<Result<(), AnyhowError>>,
     filepath: PathBuf,
   },
+  CloseFile {
+    sender: OneshotSender<Result<(), AnyhowError>>,
+    filepath: PathBuf,
+  },
   GetPlainGoals {
-    sender: OneshotSender<GetPlainGoalsResult>,
+    sender: OneshotSender<GetPlainGoalsResponse>,
     location: Location,
   },
   GetStatus {
     sender: OneshotSender<SessionStatus>,
   },
   GetNotifications {
-    sender: OneshotSender<GetNotificationsResult>,
+    sender: OneshotSender<GetNotificationsResponse>,
   },
 }
 
@@ -51,6 +55,14 @@ impl NewSessionCommand {
 
 #[derive(Args, Constructor, Deserialize, Object, Serialize)]
 pub struct OpenFileCommand {
+  #[arg(long)]
+  pub session_id: Option<Ulid>,
+
+  pub lean_filepath: PathBuf,
+}
+
+#[derive(Args, Constructor, Deserialize, Object, Serialize)]
+pub struct CloseFileCommand {
   #[arg(long)]
   pub session_id: Option<Ulid>,
 

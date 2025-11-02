@@ -4,9 +4,12 @@ use reqwest::Client as ReqwestClient;
 use ulid::Ulid;
 
 use crate::{
-  commands::{NewSessionCommand, OpenFileCommand},
-  server::{GetNotificationsResult, GetSessionsResult, NewSessionResult, Server},
-  types::{GetPlainGoalsResult, Location, SessionSetStatus},
+  commands::{CloseFileCommand, NewSessionCommand, OpenFileCommand},
+  server::{
+    Server,
+    responses::{GetNotificationsResponse, GetPlainGoalsResponse, GetSessionsResponse, NewSessionResponse},
+  },
+  types::{Location, SessionSetStatus},
 };
 
 pub struct Client {
@@ -30,7 +33,7 @@ impl Client {
     std::format!("http://{url}:{port}{path}", url = Server::IPV4_ADDR, port = self.port)
   }
 
-  pub async fn new_session(&self, command: &NewSessionCommand) -> Result<NewSessionResult, AnyhowError> {
+  pub async fn new_session(&self, command: &NewSessionCommand) -> Result<NewSessionResponse, AnyhowError> {
     let url = self.url(Server::PATH_NEW_SESSION);
 
     self
@@ -41,13 +44,13 @@ impl Client {
       .await?
       .check_status()
       .await?
-      .json::<NewSessionResult>()
+      .json::<NewSessionResponse>()
       .await?
       .ok()
   }
 
   pub async fn open_file(&self, command: &OpenFileCommand) -> Result<(), AnyhowError> {
-    let url = self.url(Server::PATH_OPEN_FILE);
+    let url = self.url(Server::PATH_FILE_OPEN);
 
     self
       .http_client
@@ -62,7 +65,23 @@ impl Client {
       .ok()
   }
 
-  pub async fn notifications(&self, session_id: Option<Ulid>) -> Result<GetNotificationsResult, AnyhowError> {
+  pub async fn close_file(&self, command: &CloseFileCommand) -> Result<(), AnyhowError> {
+    let url = self.url(Server::PATH_FILE_CLOSE);
+
+    self
+      .http_client
+      .post(url)
+      .json(command)
+      .send()
+      .await?
+      .check_status()
+      .await?
+      .json::<()>()
+      .await?
+      .ok()
+  }
+
+  pub async fn notifications(&self, session_id: Option<Ulid>) -> Result<GetNotificationsResponse, AnyhowError> {
     let url = self.url(Server::PATH_GET_NOTIFICATIONS);
 
     self
@@ -73,12 +92,12 @@ impl Client {
       .await?
       .check_status()
       .await?
-      .json::<GetNotificationsResult>()
+      .json::<GetNotificationsResponse>()
       .await?
       .ok()
   }
 
-  pub async fn get(&self, session_id: Option<Ulid>) -> Result<GetSessionsResult, AnyhowError> {
+  pub async fn get(&self, session_id: Option<Ulid>) -> Result<GetSessionsResponse, AnyhowError> {
     let url = self.url(Server::PATH_GET_SESSIONS);
 
     self
@@ -89,7 +108,7 @@ impl Client {
       .await?
       .check_status()
       .await?
-      .json::<GetSessionsResult>()
+      .json::<GetSessionsResponse>()
       .await?
       .ok()
   }
@@ -98,7 +117,7 @@ impl Client {
     &self,
     session_id: Option<Ulid>,
     location: Location,
-  ) -> Result<GetPlainGoalsResult, AnyhowError> {
+  ) -> Result<GetPlainGoalsResponse, AnyhowError> {
     let url = self.url(Server::PATH_GET_PLAIN_GOALS);
 
     self
@@ -112,7 +131,7 @@ impl Client {
       .await?
       .check_status()
       .await?
-      .json::<GetPlainGoalsResult>()
+      .json::<GetPlainGoalsResponse>()
       .await?
       .ok()
   }

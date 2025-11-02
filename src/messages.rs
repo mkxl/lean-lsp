@@ -9,11 +9,12 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value as Json;
 use ulid::Ulid;
 
-#[derive(Clone, Copy, Deserialize, Display, Eq, From, Hash, PartialEq, Serialize)]
+#[derive(Clone, Deserialize, Display, Eq, From, Hash, PartialEq, Serialize)]
 #[serde(untagged)]
 pub enum Id {
   Ulid(Ulid),
   Usize(usize),
+  Named(String),
 }
 
 pub struct Message {
@@ -60,6 +61,13 @@ impl Message {
     let params = crate::messages::text_document::did_open_notification_params(text, uri);
 
     Self::notification("textDocument/didOpen", &params)
+  }
+
+  #[allow(clippy::unused_self)]
+  pub fn text_document_did_close_notification(uri: &str) -> Json {
+    let params = crate::messages::text_document::did_close_notification_params(uri);
+
+    Self::notification("textDocument/didClose", &params)
   }
 
   pub fn text_document_document_symbol_request(uri: &str) -> Self {
