@@ -57,6 +57,16 @@ impl Session {
   }
 
   // TODO-8dffbb
+  pub async fn close_file(&self, filepath: PathBuf) -> Result<(), AnyhowError> {
+    let (sender, receiver) = tokio::sync::oneshot::channel();
+    let close_file_command = SessionCommand::CloseFile { sender, filepath };
+
+    self.commands.send(close_file_command)?;
+
+    receiver.await?
+  }
+
+  // TODO-8dffbb
   pub async fn get_plain_goals(&self, location: Location) -> Result<GetPlainGoalsResponse, AnyhowError> {
     let (sender, receiver) = tokio::sync::oneshot::channel();
     let get_plain_goals_command = SessionCommand::GetPlainGoals { sender, location };

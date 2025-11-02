@@ -4,7 +4,7 @@ use reqwest::Client as ReqwestClient;
 use ulid::Ulid;
 
 use crate::{
-  commands::{NewSessionCommand, OpenFileCommand},
+  commands::{CloseFileCommand, NewSessionCommand, OpenFileCommand},
   server::{
     Server,
     responses::{GetNotificationsResponse, GetPlainGoalsResponse, GetSessionsResponse, NewSessionResponse},
@@ -50,7 +50,23 @@ impl Client {
   }
 
   pub async fn open_file(&self, command: &OpenFileCommand) -> Result<(), AnyhowError> {
-    let url = self.url(Server::PATH_OPEN_FILE);
+    let url = self.url(Server::PATH_FILE_OPEN);
+
+    self
+      .http_client
+      .post(url)
+      .json(command)
+      .send()
+      .await?
+      .check_status()
+      .await?
+      .json::<()>()
+      .await?
+      .ok()
+  }
+
+  pub async fn close_file(&self, command: &CloseFileCommand) -> Result<(), AnyhowError> {
+    let url = self.url(Server::PATH_FILE_CLOSE);
 
     self
       .http_client

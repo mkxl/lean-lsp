@@ -15,6 +15,14 @@ pub fn did_open_notification_params(text: &str, uri: &str) -> Json {
   })
 }
 
+pub fn did_close_notification_params(uri: &str) -> Json {
+  serde_json::json!({
+      "textDocument": {
+          "uri": uri,
+      },
+  })
+}
+
 pub fn document_symbol_params(uri: &str) -> Json {
   serde_json::json!({"textDocument": {"uri": uri}})
 }

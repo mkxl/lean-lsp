@@ -8,7 +8,7 @@ use ulid::Ulid;
 
 use crate::{
   client::Client,
-  commands::{NewSessionCommand, OpenFileCommand},
+  commands::{CloseFileCommand, NewSessionCommand, OpenFileCommand},
   server::Server,
   types::Location,
 };
@@ -68,6 +68,7 @@ impl File {
 
     match self.command {
       FileCommand::Open(open_command) => client.open_file(&open_command).await?.ok(),
+      FileCommand::Close(close_command) => client.close_file(&close_command).await?.ok(),
     }
   }
 }
@@ -75,6 +76,7 @@ impl File {
 #[derive(Subcommand)]
 enum FileCommand {
   Open(OpenFileCommand),
+  Close(CloseFileCommand),
 }
 
 #[derive(Args)]

@@ -63,6 +63,13 @@ impl Message {
     Self::notification("textDocument/didOpen", &params)
   }
 
+  #[allow(clippy::unused_self)]
+  pub fn text_document_did_close_notification(uri: &str) -> Json {
+    let params = crate::messages::text_document::did_close_notification_params(uri);
+
+    Self::notification("textDocument/didClose", &params)
+  }
+
   pub fn text_document_document_symbol_request(uri: &str) -> Self {
     let params = crate::messages::text_document::document_symbol_params(uri);
 

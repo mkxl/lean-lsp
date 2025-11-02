@@ -9,7 +9,7 @@ use poem_openapi::{OpenApi, OpenApiService, param::Query, payload::Json as PoemJ
 use ulid::Ulid;
 
 use crate::{
-  commands::{NewSessionCommand, OpenFileCommand},
+  commands::{CloseFileCommand, NewSessionCommand, OpenFileCommand},
   server::responses::{GetNotificationsResponse, GetPlainGoalsResponse, GetSessionsResponse, NewSessionResponse},
   session::Session,
   session_set::SessionSet,
@@ -25,12 +25,13 @@ pub struct Server {
 impl Server {
   pub const DEFAULT_PORT: u16 = 8080;
   pub const IPV4_ADDR: Ipv4Addr = Ipv4Addr::UNSPECIFIED;
+  pub const PATH_FILE_CLOSE: &'static str = "/session/file/close";
+  pub const PATH_FILE_OPEN: &'static str = "/session/file/open";
   pub const PATH_GET_NOTIFICATIONS: &'static str = "/session/notifications";
   pub const PATH_GET_PLAIN_GOALS: &'static str = "/session/info-view/plain-goals";
   pub const PATH_GET_SESSIONS: &'static str = "/session";
   pub const PATH_GET_STATUS: &'static str = "/status";
   pub const PATH_NEW_SESSION: &'static str = "/session/new";
-  pub const PATH_OPEN_FILE: &'static str = "/session/open";
   pub const QUERY_PARAM_CHARACTER: &'static str = "character";
   pub const QUERY_PARAM_FILEPATH: &'static str = "filepath";
   pub const QUERY_PARAM_LINE: &'static str = "line";
@@ -83,13 +84,25 @@ impl Server {
     session.id().convert::<NewSessionResponse>().poem_json().ok()
   }
 
-  #[oai(path = "/session/open", method = "post")]
+  #[oai(path = "/session/file/open", method = "post")]
   async fn open_file(&self, PoemJson(command): PoemJson<OpenFileCommand>) -> Result<PoemJson<()>, PoemError> {
     self
       .session_set
       .get_session(command.session_id)
       .await?
       .open_file(command.lean_filepath)
+      .await?
+      .poem_json()
+      .ok()
+  }
+
+  #[oai(path = "/session/file/close", method = "post")]
+  async fn close_file(&self, PoemJson(command): PoemJson<CloseFileCommand>) -> Result<PoemJson<()>, PoemError> {
+    self
+      .session_set
+      .get_session(command.session_id)
+      .await?
+      .close_file(command.lean_filepath)
       .await?
       .poem_json()
       .ok()

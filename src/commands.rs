@@ -23,6 +23,10 @@ pub enum SessionCommand {
     sender: OneshotSender<Result<(), AnyhowError>>,
     filepath: PathBuf,
   },
+  CloseFile {
+    sender: OneshotSender<Result<(), AnyhowError>>,
+    filepath: PathBuf,
+  },
   GetPlainGoals {
     sender: OneshotSender<GetPlainGoalsResponse>,
     location: Location,
@@ -51,6 +55,14 @@ impl NewSessionCommand {
 
 #[derive(Args, Constructor, Deserialize, Object, Serialize)]
 pub struct OpenFileCommand {
+  #[arg(long)]
+  pub session_id: Option<Ulid>,
+
+  pub lean_filepath: PathBuf,
+}
+
+#[derive(Args, Constructor, Deserialize, Object, Serialize)]
+pub struct CloseFileCommand {
   #[arg(long)]
   pub session_id: Option<Ulid>,
 
