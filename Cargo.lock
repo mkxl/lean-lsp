@@ -1143,7 +1143,7 @@ dependencies = [
  "poem-openapi",
  "reqwest",
  "serde",
- "serde_json 1.0.144",
+ "serde_json 1.0.145",
  "strum",
  "tokio",
  "tokio-stream",

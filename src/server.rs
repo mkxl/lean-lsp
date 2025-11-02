@@ -41,7 +41,6 @@ impl Server {
   pub const DEFAULT_PORT: u16 = 8080;
   pub const IPV4_ADDR: Ipv4Addr = Ipv4Addr::UNSPECIFIED;
   pub const PATH_GET_NOTIFICATIONS: &'static str = "/session/notifications";
-  pub const PATH_GET_PLAIN_GOALS: &'static str = "/info-view/plain-goals";
   pub const PATH_GET_PLAIN_GOALS: &'static str = "/session/info-view/plain-goals";
   pub const PATH_GET_SESSIONS: &'static str = "/session";
   pub const PATH_GET_STATUS: &'static str = "/status";

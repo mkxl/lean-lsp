@@ -2,14 +2,12 @@ use std::path::{Path, PathBuf};
 
 use anyhow::Error as AnyhowError;
 use mkutils::Utils;
-use poem_openapi::Object;
-use serde::{Deserialize, Serialize};
-use serde_json::Value as Json;
 use tokio::sync::mpsc::UnboundedSender as MpscUnboundedSender;
 use ulid::Ulid;
 
 use crate::{
   commands::SessionCommand,
+  server::GetNotificationsResult,
   session_runner::SessionRunner,
   types::{GetPlainGoalsResult, Location, SessionStatus},
 };
@@ -79,7 +77,7 @@ impl Session {
   }
 
   // TODO-8dffbb
-  pub async fn notifications(&self) -> Result<Vec<Json>, AnyhowError> {
+  pub async fn notifications(&self) -> Result<GetNotificationsResult, AnyhowError> {
     let (sender, receiver) = tokio::sync::oneshot::channel();
     let get_notifications_command = SessionCommand::GetNotifications { sender };
 
