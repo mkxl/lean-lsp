@@ -6,15 +6,28 @@ use std::{
 use anyhow::Error as AnyhowError;
 use mkutils::{IntoStream, Utils};
 use serde_json::Value as Json;
+use strum::Display;
 use tokio::sync::{mpsc::UnboundedReceiver as MpscUnboundedReceiver, oneshot::Sender as OneshotSender};
 use tokio_stream::wrappers::UnboundedReceiverStream as MpscUnboundedReceiverStream;
 use ulid::Ulid;
 use valuable::Valuable;
 
 use crate::{
-  commands::SessionCommand, lean_server::LeanServer, messages::RequestWithId, server::GetPlainGoalsResult,
-  types::Location,
+  commands::SessionCommand,
+  lean_server::LeanServer,
+  messages::Request as RequestMessage,
+  types::{GetPlainGoalsResult, Location, SessionStatus},
 };
+
+#[derive(Display)]
+enum Request {
+  Initialize(OneshotSender<()>),
+  GetPlainGoals(OneshotSender<GetPlainGoalsResult>),
+  TextDocumentDocumentSymbol,
+  TextDocumentDocumentCodeAction,
+  TextDocumentFoldingRange,
+  LeanRpcConnect,
+}
 
 pub struct SessionResult {
   pub id: Ulid,
@@ -29,11 +42,6 @@ pub struct SessionRunner {
   requests: HashMap<usize, Request>,
 }
 
-pub enum Request {
-  Initialize,
-  GetPlainGoals(OneshotSender<GetPlainGoalsResult>),
-}
-
 impl SessionRunner {
   const MANIFEST_FILE_NAME: &'static str = "lake-manifest.json";
 
@@ -46,34 +54,18 @@ impl SessionRunner {
     let commands = commands.into_stream();
     let project_dirpath = Self::project_dirpath(lean_path)?;
     let lean_server = LeanServer::new(&project_dirpath, lean_server_log_dirpath)?;
-    let mut session_runner = Self {
+    let requests = HashMap::default();
+    let session_runner = Self {
       id,
       lean_server,
       project_dirpath,
       commands,
-      requests: HashMap::default(),
+      requests,
     };
-
-    session_runner.initialize()?;
 
     tracing::info!(%id, project_dirpath = %session_runner.project_dirpath.display(), "new session");
 
     session_runner.ok()
-  }
-
-  fn register_request(&mut self, id: usize, request: Request) {
-    if self.requests.insert(id, request).is_some() {
-      tracing::warn!(%id, "registering request with existing id");
-    }
-  }
-
-  fn initialize(&mut self) -> Result<(), AnyhowError> {
-    let RequestWithId { request, id } = self.lean_server.initialize_request()?;
-
-    self.register_request(id, Request::Initialize);
-    self.lean_server.send(request)?;
-
-    ().ok()
   }
 
   fn project_dirpath(lean_path: &Path) -> Result<PathBuf, AnyhowError> {
@@ -90,23 +82,19 @@ impl SessionRunner {
     anyhow::bail!("unable to get project dirpath: no manifest file found in ancestor dirpaths");
   }
 
-  #[tracing::instrument(skip_all)]
-  async fn get_plain_goals(
-    &mut self,
-    sender: OneshotSender<GetPlainGoalsResult>,
-    location: Location,
-  ) -> Result<(), AnyhowError> {
-    let uri = location.filepath.to_uri()?;
-    let RequestWithId { request, id } =
-      self
-        .lean_server
-        .messages()
-        .lean_rpc_get_plain_goals(&uri, location.line, location.character);
+  fn send_request(&mut self, request_message: RequestMessage, request: Request) -> Result<(), AnyhowError> {
+    if self.requests.insert(request_message.id, request).is_some() {
+      tracing::warn!(id = %request_message.id, "registering request with existing id");
+    }
 
-    self.register_request(id, Request::GetPlainGoals(sender));
-    self.lean_server.send(request)?;
+    self.lean_server.send(request_message.json)
+  }
 
-    ().ok()
+  fn initialize(&mut self, sender: OneshotSender<()>) -> Result<(), AnyhowError> {
+    let request_message = self.lean_server.initialize_request()?;
+    let request = Request::Initialize(sender);
+
+    self.send_request(request_message, request)
   }
 
   #[tracing::instrument(skip_all)]
@@ -119,62 +107,94 @@ impl SessionRunner {
       .read_string_async()
       .await?;
     let messages = self.lean_server.messages();
-    let messages = [
-      messages.text_document_did_open_notification(&text, &uri),
-      messages.text_document_document_symbol_request(&uri),
-      messages.text_document_document_code_action_request(&uri),
-      messages.text_document_folding_range_request(&uri),
-      messages.lean_rpc_connect_request(&uri),
-    ];
+    let text_document_did_open_notification = messages.text_document_did_open_notification(&text, &uri);
+    let text_document_document_symbol_request = messages.text_document_document_symbol_request(&uri);
+    let text_document_document_code_action_request = messages.text_document_document_code_action_request(&uri);
+    let text_document_folding_range_request = messages.text_document_folding_range_request(&uri);
+    let lean_rpc_connect_request = messages.lean_rpc_connect_request(&uri);
 
-    for message in messages {
-      self.lean_server.send(message)?;
-    }
+    self.lean_server.send(text_document_did_open_notification)?;
+    self.send_request(
+      text_document_document_symbol_request,
+      Request::TextDocumentDocumentSymbol,
+    )?;
+    self.send_request(
+      text_document_document_code_action_request,
+      Request::TextDocumentDocumentCodeAction,
+    )?;
+    self.send_request(text_document_folding_range_request, Request::TextDocumentFoldingRange)?;
+    self.send_request(lean_rpc_connect_request, Request::LeanRpcConnect)?;
 
     ().ok()
   }
 
   #[tracing::instrument(skip_all)]
-  async fn process_command(&mut self, session_command: SessionCommand) -> Result<(), AnyhowError> {
-    match session_command {
-      SessionCommand::OpenFile { sender, filepath } => self.open_file(&filepath).await.send_to_oneshot(sender),
-      SessionCommand::GetProcessStatus { sender } => self.lean_server.process_status().send_to_oneshot(sender),
-      SessionCommand::GetPlainGoals { sender, location } => self.get_plain_goals(sender, location).await,
-    }
+  fn get_plain_goals(
+    &mut self,
+    sender: OneshotSender<GetPlainGoalsResult>,
+    location: &Location,
+  ) -> Result<(), AnyhowError> {
+    let uri = location.filepath.to_uri()?;
+    let request_message =
+      self
+        .lean_server
+        .messages()
+        .lean_rpc_get_plain_goals_request(&uri, location.line, location.character);
+    let request = Request::GetPlainGoals(sender);
+
+    self.send_request(request_message, request)
+  }
+
+  fn get_status(&self) -> SessionStatus {
+    let id = self.id;
+    let process = self.lean_server.process_status();
+
+    SessionStatus { id, process }
   }
 
   #[tracing::instrument(skip_all)]
-  async fn handle_response(&mut self, response: Json) -> Result<(), AnyhowError> {
-    tracing::info!(received_message = response.as_value(), "received message");
+  async fn process_command(&mut self, session_command: SessionCommand) -> Result<(), AnyhowError> {
+    match session_command {
+      SessionCommand::Initialize { sender } => self.initialize(sender),
+      SessionCommand::OpenFile { sender, filepath } => self.open_file(&filepath).await.send_to_oneshot(sender),
+      SessionCommand::GetPlainGoals { sender, location } => self.get_plain_goals(sender, &location),
+      SessionCommand::GetStatus { sender } => self.get_status().send_to_oneshot(sender),
+    }
+  }
 
+  fn remove_associated_request(&mut self, response: &Json) -> Option<Request> {
     #[allow(clippy::cast_possible_truncation)]
-    let Some(request) = response
-      .get("id")
-      .and_then(Json::as_u64)
-      .and_then(|id| self.requests.remove(&(id as usize)))
-    else {
-      tracing::warn!(
+    let id = response.get("id")?.as_u64()? as usize;
+    let request = self.requests.remove(&id)?;
+
+    request.some()
+  }
+
+  fn process_response(&mut self, response: &Json) -> Result<(), AnyhowError> {
+    let Some(request) = self.remove_associated_request(response) else {
+      return tracing::warn!(
         received_message = response.as_value(),
         "received message without matching request"
-      );
-
-      return ().ok();
+      )
+      .ok();
     };
 
+    tracing::info!(response = response.as_value(), %request, "received response for request");
+
     match request {
-      Request::Initialize => {
-        let initialized_notification = self.lean_server.messages().initialized_notification();
-
-        tracing::info!(response = response.as_value(), "initial lean server response");
-
-        self.lean_server.send(initialized_notification)?;
-
-        ().ok()
+      Request::Initialize(sender) => {
+        ().send_to_oneshot(sender)?;
+        self
+          .lean_server
+          .send(self.lean_server.messages().initialized_notification())?;
       }
       Request::GetPlainGoals(sender) => response
         .to_value_from_value::<GetPlainGoalsResult>()?
-        .send_to_oneshot(sender),
+        .send_to_oneshot(sender)?,
+      _ => (),
     }
+
+    ().ok()
   }
 
   // TODO-8dffbb
@@ -183,17 +203,13 @@ impl SessionRunner {
     loop {
       tokio::select! {
         session_command_res = self.commands.next_item_async() => self.process_command(session_command_res?).await?,
-        json_response = self.lean_server.recv::<Json>() => self.handle_response(json_response?).await?,
+        json_response_res = self.lean_server.recv::<Json>() => self.process_response(&json_response_res?)?,
       }
     }
   }
 
-  pub fn id(&self) -> Ulid {
-    self.id
-  }
-
   pub async fn run(self) -> SessionResult {
-    let id = self.id();
+    let id = self.id;
     let result = self.result().await;
 
     SessionResult { id, result }

@@ -6,8 +6,7 @@ use std::{
 use anyhow::{Context, Error as AnyhowError};
 use bytes::{Buf, BytesMut};
 use mkutils::{IntoStream, Process, Utils};
-use poem_openapi::Object;
-use serde::{Deserialize, Serialize, de::DeserializeOwned};
+use serde::{Serialize, de::DeserializeOwned};
 use tokio::{
   io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader},
   process::{Child, ChildStderr, ChildStdin, ChildStdout},
@@ -17,7 +16,10 @@ use tokio::{
 use tokio_stream::wrappers::{LinesStream, UnboundedReceiverStream as MpscUnboundedReceiverStream};
 use valuable::Valuable;
 
-use crate::messages::{Messages, RequestWithId};
+use crate::{
+  messages::{Messages, Request},
+  types::TaskStatus,
+};
 
 struct LeanServerStdout {
   buf: BytesMut,
@@ -133,11 +135,6 @@ impl LeanServerProcess {
   }
 }
 
-#[derive(Deserialize, Object, Serialize)]
-pub struct ProcessStatus {
-  pub is_finished: bool,
-}
-
 pub struct LeanServer {
   inputs: MpscUnboundedSender<Vec<u8>>,
   outputs: MpscUnboundedReceiverStream<BytesMut>,
@@ -170,7 +167,7 @@ impl LeanServer {
     lean_server.ok()
   }
 
-  pub fn initialize_request(&mut self) -> Result<RequestWithId, AnyhowError> {
+  pub fn initialize_request(&mut self) -> Result<Request, AnyhowError> {
     let root_path = self.project_dirpath.absolute()?;
     let root_uri = root_path.to_uri()?;
     let name = root_path.file_name_ok()?.to_str_ok()?;
@@ -202,9 +199,7 @@ impl LeanServer {
       .ok()
   }
 
-  pub fn process_status(&self) -> ProcessStatus {
-    ProcessStatus {
-      is_finished: self.process_handle.is_finished(),
-    }
+  pub fn process_status(&self) -> TaskStatus {
+    self.process_handle.is_finished().into()
   }
 }

@@ -9,6 +9,7 @@ use crate::{
   commands::{NewSessionCommand, SessionSetCommand},
   session::Session,
   session_set_runner::SessionSetRunner,
+  types::SessionSetStatus,
 };
 
 pub struct SessionSet {
@@ -22,17 +23,6 @@ impl SessionSet {
     let join_handle = SessionSetRunner::new(runner_commands).run().spawn_task();
 
     Self { commands, join_handle }
-  }
-
-  #[tracing::instrument(skip_all)]
-  pub async fn run_session(lean_path: PathBuf, lean_server_log_dirpath: Option<PathBuf>) -> Result<(), AnyhowError> {
-    // NOTE: assign the result of [session_set.new_session()] to a variable to
-    // prevent it from being immediately dropped and closing the associated
-    // [SessionRunner] instances's commands receiver stream
-    let session_set = Self::new();
-    let _session = session_set.new_session(lean_path, lean_server_log_dirpath).await?;
-
-    session_set.join_handle.await?
   }
 
   // TODO-8dffbb: extract out common functionality
@@ -69,6 +59,20 @@ impl SessionSet {
     self.commands.send(get_session)?;
 
     receiver.await?
+  }
+
+  pub async fn status(&self) -> Result<SessionSetStatus, AnyhowError> {
+    let session_set = self.join_handle.is_finished().into();
+    let sessions = self
+      .get_sessions()
+      .await?
+      .iter()
+      .map(Session::status)
+      .try_join_all()
+      .await?;
+    let session_set_status = SessionSetStatus::new(session_set, sessions);
+
+    session_set_status.ok()
   }
 }
 

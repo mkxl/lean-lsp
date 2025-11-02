@@ -10,9 +10,9 @@ use ulid::Ulid;
 
 use crate::{
   commands::{NewSessionCommand, OpenFileCommand},
-  session::{Session, SessionStatus},
+  session::Session,
   session_set::SessionSet,
-  types::Location,
+  types::{GetPlainGoalsResult, Location, SessionSetStatus, SessionStatus},
 };
 
 #[derive(From, Deserialize, Object, Serialize)]
@@ -25,17 +25,6 @@ pub struct GetSessionsResult {
   pub sessions: Vec<SessionStatus>,
 }
 
-#[derive(Deserialize, From, Object, Serialize)]
-pub struct GetPlainGoalsResult {
-  pub result: Option<PlainGoals>,
-}
-
-#[derive(Deserialize, From, Object, Serialize)]
-pub struct PlainGoals {
-  pub goals: Vec<String>,
-  pub rendered: String,
-}
-
 #[derive(Default)]
 pub struct Server {
   session_set: SessionSet,
@@ -43,21 +32,28 @@ pub struct Server {
 
 #[OpenApi]
 impl Server {
-  pub const PATH_GET_SESSIONS: &'static str = "/session";
-  pub const PATH_GET_PLAIN_GOALS: &'static str = "/info-view/plain-goals";
-  pub const PATH_NEW_SESSION: &'static str = "/session/new";
-  pub const PATH_OPEN_FILE: &'static str = "/session/open";
   pub const DEFAULT_PORT: u16 = 8080;
   pub const IPV4_ADDR: Ipv4Addr = Ipv4Addr::UNSPECIFIED;
-  pub const QUERY_PARAM_SESSION_ID: &'static str = "session_id";
+  pub const PATH_GET_PLAIN_GOALS: &'static str = "/info-view/plain-goals";
+  pub const PATH_GET_SESSIONS: &'static str = "/session";
+  pub const PATH_GET_STATUS: &'static str = "/status";
+  pub const PATH_NEW_SESSION: &'static str = "/session/new";
+  pub const PATH_OPEN_FILE: &'static str = "/session/open";
+  pub const QUERY_PARAM_CHARACTER: &'static str = "character";
   pub const QUERY_PARAM_FILEPATH: &'static str = "filepath";
   pub const QUERY_PARAM_LINE: &'static str = "line";
-  pub const QUERY_PARAM_CHARACTER: &'static str = "character";
+  pub const QUERY_PARAM_SESSION_ID: &'static str = "session_id";
 
-  const PATH_ROOT: &'static str = "/";
   const PATH_OPEN_API: &'static str = "/openapi";
+  const PATH_ROOT: &'static str = "/";
   const TITLE: &'static str = std::env!("CARGO_PKG_NAME");
   const VERSION: &'static str = std::env!("CARGO_PKG_VERSION");
+
+  #[oai(path = "/status", method = "get")]
+  #[allow(clippy::unused_async)]
+  async fn get(&self) -> Result<Json<SessionSetStatus>, PoemError> {
+    self.session_set.status().await?.poem_json().ok()
+  }
 
   #[oai(path = "/session", method = "get")]
   async fn get_sessions(&self, Query(session_id): Query<Option<Ulid>>) -> Result<Json<GetSessionsResult>, PoemError> {
@@ -77,6 +73,18 @@ impl Server {
       .ok()
   }
 
+  #[oai(path = "/session/new", method = "post")]
+  async fn new_session(&self, Json(command): Json<NewSessionCommand>) -> Result<Json<NewSessionResult>, PoemError> {
+    let session = self
+      .session_set
+      .new_session(command.lean_path, command.lean_server_log_dirpath)
+      .await?;
+
+    session.initialize().await?;
+
+    session.id().convert::<NewSessionResult>().poem_json().ok()
+  }
+
   #[oai(path = "/session/open", method = "post")]
   async fn open_file(&self, Json(command): Json<OpenFileCommand>) -> Result<Json<()>, PoemError> {
     self
@@ -85,18 +93,6 @@ impl Server {
       .await?
       .open_file(command.lean_filepath)
       .await?
-      .poem_json()
-      .ok()
-  }
-
-  #[oai(path = "/session/new", method = "post")]
-  async fn new_session(&self, Json(command): Json<NewSessionCommand>) -> Result<Json<NewSessionResult>, PoemError> {
-    self
-      .session_set
-      .new_session(command.lean_path, command.lean_server_log_dirpath)
-      .await?
-      .id()
-      .convert::<NewSessionResult>()
       .poem_json()
       .ok()
   }
