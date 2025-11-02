@@ -5,8 +5,8 @@ use ulid::Ulid;
 
 use crate::{
   commands::{NewSessionCommand, OpenFileCommand},
-  server::{GetPlainGoalsResult, GetSessionsResult, NewSessionResult, Server},
-  types::Location,
+  server::{GetSessionsResult, NewSessionResult, Server},
+  types::{GetPlainGoalsResult, Location, SessionSetStatus},
 };
 
 pub struct Client {
@@ -97,6 +97,21 @@ impl Client {
       .check_status()
       .await?
       .json::<GetPlainGoalsResult>()
+      .await?
+      .ok()
+  }
+
+  pub async fn status(&self) -> Result<SessionSetStatus, AnyhowError> {
+    let url = self.url(Server::PATH_GET_STATUS);
+
+    self
+      .http_client
+      .get(url)
+      .send()
+      .await?
+      .check_status()
+      .await?
+      .json::<SessionSetStatus>()
       .await?
       .ok()
   }

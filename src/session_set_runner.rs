@@ -68,10 +68,7 @@ impl SessionSetRunner {
   #[tracing::instrument(skip_all)]
   fn cleanup_session(&mut self, session_result: SessionResult) {
     self.sessions.remove(&session_result.id);
-
-    if let Err(error) = session_result.result {
-      tracing::warn!(%error, "error running session");
-    }
+    session_result.result.context("run session").log_if_error().unit();
 
     tracing::info!(session_id = %session_result.id, "cleaned up session");
   }

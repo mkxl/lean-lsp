@@ -10,7 +10,6 @@ use crate::{
   client::Client,
   commands::{NewSessionCommand, OpenFileCommand},
   server::Server,
-  session_set::SessionSet,
   types::Location,
 };
 
@@ -81,6 +80,11 @@ impl Serve {
   }
 }
 
+#[derive(Subcommand)]
+enum InfoViewCommand {
+  GetPlainGoals(Location),
+}
+
 #[derive(Args)]
 struct InfoView {
   #[arg(long, default_value_t = Server::DEFAULT_PORT)]
@@ -106,9 +110,16 @@ impl InfoView {
   }
 }
 
-#[derive(Subcommand)]
-enum InfoViewCommand {
-  GetPlainGoals(Location),
+#[derive(Args)]
+struct Status {
+  #[arg(long, default_value_t = Server::DEFAULT_PORT)]
+  port: u16,
+}
+
+impl Status {
+  async fn run(self) -> Result<(), AnyhowError> {
+    Client::new(self.port)?.status().await?.to_json_str()?.println().ok()
+  }
 }
 
 #[derive(Subcommand)]
@@ -116,9 +127,9 @@ enum Command {
   Get(Get),
   New(New),
   Open(Open),
-  Run(NewSessionCommand),
   Serve(Serve),
   InfoView(InfoView),
+  Status(Status),
 }
 
 #[derive(Parser)]
@@ -156,14 +167,6 @@ impl CliArgs {
       .init();
   }
 
-  async fn run_session(new_session_command: NewSessionCommand) -> Result<(), AnyhowError> {
-    SessionSet::run_session(
-      new_session_command.lean_path,
-      new_session_command.lean_server_log_dirpath,
-    )
-    .await
-  }
-
   pub async fn run(self) -> Result<(), AnyhowError> {
     self.init_tracing();
 
@@ -171,9 +174,9 @@ impl CliArgs {
       Command::Get(get) => get.run().await,
       Command::New(new) => new.run().await,
       Command::Open(open) => open.run().await,
-      Command::Run(new_session_command) => Self::run_session(new_session_command).await,
       Command::Serve(serve) => serve.run().await,
       Command::InfoView(info_view) => info_view.run().await,
+      Command::Status(status) => status.run().await,
     }
   }
 }

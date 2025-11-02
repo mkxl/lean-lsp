@@ -9,23 +9,25 @@ use tokio::sync::oneshot::Sender as OneshotSender;
 use ulid::Ulid;
 
 use crate::{
-  lean_server::{LeanServer, ProcessStatus},
-  server::GetPlainGoalsResult,
+  lean_server::LeanServer,
   session::Session,
-  types::Location,
+  types::{GetPlainGoalsResult, Location, SessionStatus},
 };
 
 pub enum SessionCommand {
+  Initialize {
+    sender: OneshotSender<()>,
+  },
   OpenFile {
     sender: OneshotSender<Result<(), AnyhowError>>,
     filepath: PathBuf,
   },
-  GetProcessStatus {
-    sender: OneshotSender<ProcessStatus>,
-  },
   GetPlainGoals {
     sender: OneshotSender<GetPlainGoalsResult>,
     location: Location,
+  },
+  GetStatus {
+    sender: OneshotSender<SessionStatus>,
   },
 }
 

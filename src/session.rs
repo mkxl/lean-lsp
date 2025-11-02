@@ -2,21 +2,14 @@ use std::path::{Path, PathBuf};
 
 use anyhow::Error as AnyhowError;
 use mkutils::Utils;
-use poem_openapi::Object;
-use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc::UnboundedSender as MpscUnboundedSender;
 use ulid::Ulid;
 
 use crate::{
-  commands::SessionCommand, lean_server::ProcessStatus, server::GetPlainGoalsResult, session_runner::SessionRunner,
-  types::Location,
+  commands::SessionCommand,
+  session_runner::SessionRunner,
+  types::{GetPlainGoalsResult, Location, SessionStatus},
 };
-
-#[derive(Deserialize, Object, Serialize)]
-pub struct SessionStatus {
-  id: Ulid,
-  process: ProcessStatus,
-}
 
 #[derive(Clone)]
 pub struct Session {
@@ -43,6 +36,16 @@ impl Session {
   }
 
   // TODO-8dffbb
+  pub async fn initialize(&self) -> Result<(), AnyhowError> {
+    let (sender, receiver) = tokio::sync::oneshot::channel();
+    let initialize_command = SessionCommand::Initialize { sender };
+
+    self.commands.send(initialize_command)?;
+
+    receiver.await?.ok()
+  }
+
+  // TODO-8dffbb
   pub async fn open_file(&self, filepath: PathBuf) -> Result<(), AnyhowError> {
     let (sender, receiver) = tokio::sync::oneshot::channel();
     let open_file_command = SessionCommand::OpenFile { sender, filepath };
@@ -65,14 +68,10 @@ impl Session {
   // TODO-8dffbb
   pub async fn status(&self) -> Result<SessionStatus, AnyhowError> {
     let (sender, receiver) = tokio::sync::oneshot::channel();
-    let get_process_status = SessionCommand::GetProcessStatus { sender };
+    let get_process_status = SessionCommand::GetStatus { sender };
 
     self.commands.send(get_process_status)?;
 
-    let id = self.id;
-    let process = receiver.await?;
-    let session_status = SessionStatus { id, process };
-
-    session_status.ok()
+    receiver.await?.ok()
   }
 }
