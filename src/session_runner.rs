@@ -4,7 +4,7 @@ use std::{
 };
 
 use anyhow::Error as AnyhowError;
-use mkutils::{IntoStream, Utils};
+use mkutils::{IntoStream, Utils, ToValue};
 use serde::Deserialize;
 use serde_json::Value as Json;
 use strum::Display;
@@ -17,7 +17,6 @@ use crate::{
   lean_server::LeanServer,
   messages::Request as RequestMessage,
   server::GetNotificationsResult,
-  to_value::ToValue,
   types::{GetPlainGoalsResult, Location, SessionStatus},
 };
 
@@ -245,7 +244,7 @@ impl SessionRunner {
   }
 
   pub fn take_notifications(&mut self) -> Vec<Json> {
-    std::mem::take(&mut self.notifications)
+    self.notifications.mem_take()
   }
 
   pub async fn run(self) -> SessionResult {
