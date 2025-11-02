@@ -10,9 +10,9 @@ use ulid::Ulid;
 
 use crate::{
   lean_server::LeanServer,
-  server::responses::GetNotificationsResponse,
+  server::responses::{GetNotificationsResponse, GetPlainGoalsResponse},
   session::Session,
-  types::{GetPlainGoalsResult, Location, SessionStatus},
+  types::{Location, SessionStatus},
 };
 
 pub enum SessionCommand {
@@ -24,7 +24,7 @@ pub enum SessionCommand {
     filepath: PathBuf,
   },
   GetPlainGoals {
-    sender: OneshotSender<GetPlainGoalsResult>,
+    sender: OneshotSender<GetPlainGoalsResponse>,
     location: Location,
   },
   GetStatus {

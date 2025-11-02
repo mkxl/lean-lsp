@@ -7,9 +7,9 @@ use crate::{
   commands::{NewSessionCommand, OpenFileCommand},
   server::{
     Server,
-    responses::{GetNotificationsResponse, GetSessionsResponse, NewSessionResponse},
+    responses::{GetNotificationsResponse, GetPlainGoalsResponse, GetSessionsResponse, NewSessionResponse},
   },
-  types::{GetPlainGoalsResult, Location, SessionSetStatus},
+  types::{Location, SessionSetStatus},
 };
 
 pub struct Client {
@@ -101,7 +101,7 @@ impl Client {
     &self,
     session_id: Option<Ulid>,
     location: Location,
-  ) -> Result<GetPlainGoalsResult, AnyhowError> {
+  ) -> Result<GetPlainGoalsResponse, AnyhowError> {
     let url = self.url(Server::PATH_GET_PLAIN_GOALS);
 
     self
@@ -115,7 +115,7 @@ impl Client {
       .await?
       .check_status()
       .await?
-      .json::<GetPlainGoalsResult>()
+      .json::<GetPlainGoalsResponse>()
       .await?
       .ok()
   }

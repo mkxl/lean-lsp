@@ -15,14 +15,14 @@ use crate::{
   commands::SessionCommand,
   lean_server::LeanServer,
   messages::{Id, Message},
-  server::responses::GetNotificationsResponse,
-  types::{GetPlainGoalsResult, Location, SessionStatus},
+  server::responses::{GetNotificationsResponse, GetPlainGoalsResponse},
+  types::{Location, SessionStatus},
 };
 
 #[derive(Display)]
 enum Request {
   Initialize(OneshotSender<()>),
-  GetPlainGoals(OneshotSender<GetPlainGoalsResult>),
+  GetPlainGoals(OneshotSender<GetPlainGoalsResponse>),
   TextDocumentDocumentSymbol,
   TextDocumentDocumentCodeAction,
   TextDocumentFoldingRange,
@@ -133,7 +133,7 @@ impl SessionRunner {
   #[tracing::instrument(skip_all)]
   fn get_plain_goals(
     &mut self,
-    sender: OneshotSender<GetPlainGoalsResult>,
+    sender: OneshotSender<GetPlainGoalsResponse>,
     location: &Location,
   ) -> Result<(), AnyhowError> {
     let uri = location.filepath.to_uri()?;
@@ -176,7 +176,7 @@ impl SessionRunner {
         self.lean_server.send(notification)?;
       }
       Request::GetPlainGoals(sender) => response
-        .to_value_from_value::<GetPlainGoalsResult>()?
+        .to_value_from_value::<GetPlainGoalsResponse>()?
         .send_to_oneshot(sender)?,
       _ => (),
     }

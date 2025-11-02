@@ -10,10 +10,10 @@ use ulid::Ulid;
 
 use crate::{
   commands::{NewSessionCommand, OpenFileCommand},
-  server::responses::{GetNotificationsResponse, GetSessionsResponse, NewSessionResponse},
+  server::responses::{GetNotificationsResponse, GetPlainGoalsResponse, GetSessionsResponse, NewSessionResponse},
   session::Session,
   session_set::SessionSet,
-  types::{GetPlainGoalsResult, Location, SessionSetStatus},
+  types::{Location, SessionSetStatus},
 };
 
 #[derive(Default)]
@@ -118,7 +118,7 @@ impl Server {
     Query(filepath): Query<PathBuf>,
     Query(line): Query<usize>,
     Query(character): Query<usize>,
-  ) -> Result<PoemJson<GetPlainGoalsResult>, PoemError> {
+  ) -> Result<PoemJson<GetPlainGoalsResponse>, PoemError> {
     let location = Location::new(filepath, line, character);
     let response = self
       .session_set

@@ -7,9 +7,9 @@ use ulid::Ulid;
 
 use crate::{
   commands::SessionCommand,
-  server::responses::GetNotificationsResponse,
+  server::responses::{GetNotificationsResponse, GetPlainGoalsResponse},
   session_runner::SessionRunner,
-  types::{GetPlainGoalsResult, Location, SessionStatus},
+  types::{Location, SessionStatus},
 };
 
 #[derive(Clone)]
@@ -57,7 +57,7 @@ impl Session {
   }
 
   // TODO-8dffbb
-  pub async fn get_plain_goals(&self, location: Location) -> Result<GetPlainGoalsResult, AnyhowError> {
+  pub async fn get_plain_goals(&self, location: Location) -> Result<GetPlainGoalsResponse, AnyhowError> {
     let (sender, receiver) = tokio::sync::oneshot::channel();
     let get_plain_goals_command = SessionCommand::GetPlainGoals { sender, location };
 

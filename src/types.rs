@@ -29,11 +29,6 @@ pub struct PlainGoals {
 }
 
 #[derive(Deserialize, Object, Serialize)]
-pub struct GetPlainGoalsResult {
-  pub result: Option<PlainGoals>,
-}
-
-#[derive(Deserialize, Object, Serialize)]
 pub struct SessionStatus {
   pub id: Ulid,
   pub process: TaskStatus,

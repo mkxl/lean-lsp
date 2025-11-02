@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value as Json;
 use ulid::Ulid;
 
-use crate::types::SessionStatus;
+use crate::types::{PlainGoals, SessionStatus};
 
 #[derive(From, Deserialize, Object, Serialize)]
 pub struct NewSessionResponse {
@@ -19,4 +19,9 @@ pub struct GetSessionsResponse {
 #[derive(Deserialize, From, Object, Serialize)]
 pub struct GetNotificationsResponse {
   pub notifications: Vec<Json>,
+}
+
+#[derive(Deserialize, Object, Serialize)]
+pub struct GetPlainGoalsResponse {
+  pub result: Option<PlainGoals>,
 }
