@@ -79,7 +79,12 @@ struct Notifications {
 
 impl Notifications {
   async fn run(self) -> Result<(), AnyhowError> {
-    Client::new(self.port)?.notifications(self.session_id).await?.to_json_str()?.println().ok()
+    Client::new(self.port)?
+      .notifications(self.session_id)
+      .await?
+      .to_json_str()?
+      .println()
+      .ok()
   }
 }
 

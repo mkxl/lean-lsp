@@ -10,8 +10,8 @@ use ulid::Ulid;
 
 use crate::{
   lean_server::LeanServer,
-  session::Session,
   server::GetNotificationsResult,
+  session::Session,
   types::{GetPlainGoalsResult, Location, SessionStatus},
 };
 

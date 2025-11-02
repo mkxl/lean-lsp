@@ -15,10 +15,10 @@ use ulid::Ulid;
 use crate::{
   commands::SessionCommand,
   lean_server::LeanServer,
-  server::GetNotificationsResult,
   messages::Request as RequestMessage,
-  types::{GetPlainGoalsResult, Location, SessionStatus},
+  server::GetNotificationsResult,
   to_value::ToValue,
+  types::{GetPlainGoalsResult, Location, SessionStatus},
 };
 
 #[derive(Display)]
@@ -164,7 +164,10 @@ impl SessionRunner {
       SessionCommand::OpenFile { sender, filepath } => self.open_file(&filepath).await.send_to_oneshot(sender),
       SessionCommand::GetPlainGoals { sender, location } => self.get_plain_goals(sender, &location),
       SessionCommand::GetStatus { sender } => self.get_status().send_to_oneshot(sender),
-      SessionCommand::GetNotifications { sender } => self.take_notifications().convert::<GetNotificationsResult>().send_to_oneshot(sender),
+      SessionCommand::GetNotifications { sender } => self
+        .take_notifications()
+        .convert::<GetNotificationsResult>()
+        .send_to_oneshot(sender),
     }
   }
 

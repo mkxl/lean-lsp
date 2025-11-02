@@ -105,7 +105,10 @@ impl Server {
   }
 
   #[oai(path = "/session/notifications", method = "get")]
-  async fn notifications(&self, Query(session_id): Query<Option<Ulid>>) -> Result<Json<GetNotificationsResult>, PoemError> {
+  async fn notifications(
+    &self,
+    Query(session_id): Query<Option<Ulid>>,
+  ) -> Result<Json<GetNotificationsResult>, PoemError> {
     self
       .session_set
       .get_session(session_id)
