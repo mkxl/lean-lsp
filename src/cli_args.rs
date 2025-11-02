@@ -54,18 +54,27 @@ impl New {
 }
 
 #[derive(Args)]
-struct Open {
+struct File {
   #[arg(long, default_value_t = Server::DEFAULT_PORT)]
   port: u16,
 
-  #[command(flatten)]
-  command: OpenFileCommand,
+  #[command(subcommand)]
+  command: FileCommand,
 }
 
-impl Open {
+impl File {
   async fn run(self) -> Result<(), AnyhowError> {
-    Client::new(self.port)?.open_file(&self.command).await?.ok()
+    let client = Client::new(self.port)?;
+
+    match self.command {
+      FileCommand::Open(open_command) => client.open_file(&open_command).await?.ok(),
+    }
   }
+}
+
+#[derive(Subcommand)]
+enum FileCommand {
+  Open(OpenFileCommand),
 }
 
 #[derive(Args)]
@@ -146,7 +155,7 @@ impl Status {
 enum Command {
   Get(Get),
   New(New),
-  Open(Open),
+  File(File),
   Notifications(Notifications),
   Serve(Serve),
   InfoView(InfoView),
@@ -194,7 +203,7 @@ impl CliArgs {
     match self.command {
       Command::Get(get) => get.run().await,
       Command::New(new) => new.run().await,
-      Command::Open(open) => open.run().await,
+      Command::File(open) => open.run().await,
       Command::Notifications(notifications) => notifications.run().await,
       Command::Serve(serve) => serve.run().await,
       Command::InfoView(info_view) => info_view.run().await,
