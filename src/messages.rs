@@ -9,11 +9,12 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value as Json;
 use ulid::Ulid;
 
-#[derive(Clone, Copy, Deserialize, Display, Eq, From, Hash, PartialEq, Serialize)]
+#[derive(Clone, Deserialize, Display, Eq, From, Hash, PartialEq, Serialize)]
 #[serde(untagged)]
 pub enum Id {
   Ulid(Ulid),
   Usize(usize),
+  Named(String),
 }
 
 pub struct Message {
