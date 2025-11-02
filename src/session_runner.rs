@@ -4,7 +4,7 @@ use std::{
 };
 
 use anyhow::Error as AnyhowError;
-use mkutils::{IntoStream, Utils, ToValue};
+use mkutils::{IntoStream, ToValue, Utils};
 use serde::Deserialize;
 use serde_json::Value as Json;
 use strum::Display;
@@ -208,10 +208,10 @@ impl SessionRunner {
 
     match request {
       Request::Initialize(sender) => {
+        let notification = self.lean_server.messages().initialized_notification();
+
         ().send_to_oneshot(sender)?;
-        self
-          .lean_server
-          .send(self.lean_server.messages().initialized_notification())?;
+        self.lean_server.send(notification)?;
       }
       Request::GetPlainGoals(sender) => response
         .to_value_from_value::<GetPlainGoalsResult>()?
