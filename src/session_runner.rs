@@ -169,7 +169,7 @@ impl SessionRunner {
   }
 
   fn remove_associated_request(&mut self, id: &Ulid) -> Option<Request> {
-    self.requests.remove(&id)?.some()
+    self.requests.remove(id)?.some()
   }
 
   fn process_message(&mut self, message: Json) -> Result<(), AnyhowError> {
