@@ -4,18 +4,19 @@ use std::{
 };
 
 use anyhow::Error as AnyhowError;
-use mkutils::{IntoStream, Utils};
+use mkutils::{IntoStream, ToValue, Utils};
+use serde::Deserialize;
 use serde_json::Value as Json;
 use strum::Display;
 use tokio::sync::{mpsc::UnboundedReceiver as MpscUnboundedReceiver, oneshot::Sender as OneshotSender};
 use tokio_stream::wrappers::UnboundedReceiverStream as MpscUnboundedReceiverStream;
 use ulid::Ulid;
-use valuable::Valuable;
 
 use crate::{
   commands::SessionCommand,
   lean_server::LeanServer,
   messages::Request as RequestMessage,
+  server::GetNotificationsResult,
   types::{GetPlainGoalsResult, Location, SessionStatus},
 };
 
@@ -39,7 +40,8 @@ pub struct SessionRunner {
   lean_server: LeanServer,
   project_dirpath: PathBuf,
   commands: MpscUnboundedReceiverStream<SessionCommand>,
-  requests: HashMap<usize, Request>,
+  requests: HashMap<Ulid, Request>,
+  notifications: Vec<Json>,
 }
 
 impl SessionRunner {
@@ -55,12 +57,14 @@ impl SessionRunner {
     let project_dirpath = Self::project_dirpath(lean_path)?;
     let lean_server = LeanServer::new(&project_dirpath, lean_server_log_dirpath)?;
     let requests = HashMap::default();
+    let notifications = Vec::default();
     let session_runner = Self {
       id,
       lean_server,
       project_dirpath,
       commands,
       requests,
+      notifications,
     };
 
     tracing::info!(%id, project_dirpath = %session_runner.project_dirpath.display(), "new session");
@@ -159,34 +163,55 @@ impl SessionRunner {
       SessionCommand::OpenFile { sender, filepath } => self.open_file(&filepath).await.send_to_oneshot(sender),
       SessionCommand::GetPlainGoals { sender, location } => self.get_plain_goals(sender, &location),
       SessionCommand::GetStatus { sender } => self.get_status().send_to_oneshot(sender),
+      SessionCommand::GetNotifications { sender } => self
+        .take_notifications()
+        .convert::<GetNotificationsResult>()
+        .send_to_oneshot(sender),
     }
   }
 
-  fn remove_associated_request(&mut self, response: &Json) -> Option<Request> {
-    #[allow(clippy::cast_possible_truncation)]
-    let id = response.get("id")?.as_u64()? as usize;
-    let request = self.requests.remove(&id)?;
-
-    request.some()
+  fn remove_associated_request(&mut self, id: &Ulid) -> Option<Request> {
+    self.requests.remove(id)?.some()
   }
 
-  fn process_response(&mut self, response: &Json) -> Result<(), AnyhowError> {
-    let Some(request) = self.remove_associated_request(response) else {
+  fn process_message(&mut self, message: Json) -> Result<(), AnyhowError> {
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum Id {
+      Ulid(Ulid),
+      Usize(usize),
+    }
+
+    tracing::info!(received_message = message.to_value(), "received message");
+
+    let id = message.get("id").and_then(|id| id.to_value_from_value().ok());
+
+    match id {
+      Some(Id::Ulid(id)) => self.process_response(id, &message)?,
+      Some(Id::Usize(id)) => self.process_request(id, message),
+      None => self.process_notification(message),
+    }
+
+    ().ok()
+  }
+
+  fn process_response(&mut self, id: Ulid, response: &Json) -> Result<(), AnyhowError> {
+    let Some(request) = self.remove_associated_request(&id) else {
       return tracing::warn!(
-        received_message = response.as_value(),
+        received_message = response.to_value(),
         "received message without matching request"
       )
       .ok();
     };
 
-    tracing::info!(response = response.as_value(), %request, "received response for request");
+    tracing::info!(received_response = response.to_value(), %request, "received response for request");
 
     match request {
       Request::Initialize(sender) => {
+        let notification = self.lean_server.messages().initialized_notification();
+
         ().send_to_oneshot(sender)?;
-        self
-          .lean_server
-          .send(self.lean_server.messages().initialized_notification())?;
+        self.lean_server.send(notification)?;
       }
       Request::GetPlainGoals(sender) => response
         .to_value_from_value::<GetPlainGoalsResult>()?
@@ -197,15 +222,29 @@ impl SessionRunner {
     ().ok()
   }
 
+  fn process_request(&mut self, _id: usize, request: Json) {
+    tracing::info!(received_request = request.to_value(), "received request");
+  }
+
+  fn process_notification(&mut self, notification: Json) {
+    tracing::info!(received_notification = notification.to_value(), "received notification");
+
+    self.notifications.push(notification);
+  }
+
   // TODO-8dffbb
   #[tracing::instrument(skip_all)]
   async fn result(mut self) -> Result<(), AnyhowError> {
     loop {
       tokio::select! {
         session_command_res = self.commands.next_item_async() => self.process_command(session_command_res?).await?,
-        json_response_res = self.lean_server.recv::<Json>() => self.process_response(&json_response_res?)?,
+        json_message_res = self.lean_server.recv::<Json>() => self.process_message(json_message_res?)?,
       }
     }
+  }
+
+  pub fn take_notifications(&mut self) -> Vec<Json> {
+    self.notifications.mem_take()
   }
 
   pub async fn run(self) -> SessionResult {

@@ -5,7 +5,7 @@ use std::{
 
 use anyhow::{Context, Error as AnyhowError};
 use bytes::{Buf, BytesMut};
-use mkutils::{IntoStream, Process, Utils};
+use mkutils::{IntoStream, Process, ToValue, Utils};
 use serde::{Serialize, de::DeserializeOwned};
 use tokio::{
   io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader},
@@ -14,7 +14,6 @@ use tokio::{
   task::JoinHandle,
 };
 use tokio_stream::wrappers::{LinesStream, UnboundedReceiverStream as MpscUnboundedReceiverStream};
-use valuable::Valuable;
 
 use crate::{
   messages::{Messages, Request},
@@ -155,7 +154,7 @@ impl LeanServer {
     let process_handle = LeanServerProcess::new(&project_dirpath, log_dirpath, process_inputs, process_outputs)?
       .run()
       .spawn_task();
-    let messages = Messages::default();
+    let messages = Messages;
     let lean_server = Self {
       inputs,
       outputs,
@@ -185,7 +184,7 @@ impl LeanServer {
 
     self.inputs.send(json_byte_str)?;
 
-    tracing::info!(json = value.to_json()?.as_value(), "sent message");
+    tracing::info!(json = value.to_json()?.to_value(), "sent message");
 
     ().ok()
   }

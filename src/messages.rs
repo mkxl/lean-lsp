@@ -2,26 +2,24 @@ pub mod initialize;
 pub mod lean_rpc;
 pub mod text_document;
 
-use std::{path::Path, sync::atomic::AtomicUsize};
+use std::path::Path;
 
 use derive_more::Constructor;
-use mkutils::Utils;
 use serde_json::Value as Json;
+use ulid::Ulid;
 
 #[derive(Default)]
-pub struct Messages {
-  id: AtomicUsize,
-}
+pub struct Messages;
 
 #[derive(Constructor)]
 pub struct Request {
-  pub id: usize,
+  pub id: Ulid,
   pub json: Json,
 }
 
 impl Messages {
   fn request(&self, method: &str, params: &Json) -> Request {
-    let id = self.id.inc();
+    let id = Ulid::new();
     let json = serde_json::json!({
       "jsonrpc": "2.0",
       "id": id,
