@@ -1,35 +1,20 @@
+pub mod responses;
+
 use std::{net::Ipv4Addr, path::PathBuf};
 
 use anyhow::Error as AnyhowError;
-use derive_more::From;
 use mkutils::Utils;
 use poem::{EndpointExt, Error as PoemError, Route, Server as PoemServer, listener::TcpListener, middleware::Tracing};
-use poem_openapi::{Object, OpenApi, OpenApiService, param::Query, payload::Json as PoemJson};
-use serde::{Deserialize, Serialize};
-use serde_json::Value as Json;
+use poem_openapi::{OpenApi, OpenApiService, param::Query, payload::Json as PoemJson};
 use ulid::Ulid;
 
 use crate::{
   commands::{NewSessionCommand, OpenFileCommand},
+  server::responses::{GetNotificationsResponse, GetSessionsResponse, NewSessionResponse},
   session::Session,
   session_set::SessionSet,
-  types::{GetPlainGoalsResult, Location, SessionSetStatus, SessionStatus},
+  types::{GetPlainGoalsResult, Location, SessionSetStatus},
 };
-
-#[derive(From, Deserialize, Object, Serialize)]
-pub struct NewSessionResult {
-  pub session_id: Ulid,
-}
-
-#[derive(Deserialize, From, Object)]
-pub struct GetSessionsResult {
-  pub sessions: Vec<SessionStatus>,
-}
-
-#[derive(Deserialize, From, Object, Serialize)]
-pub struct GetNotificationsResult {
-  pub notifications: Vec<Json>,
-}
 
 #[derive(Default)]
 pub struct Server {
@@ -66,7 +51,7 @@ impl Server {
   async fn get_sessions(
     &self,
     Query(session_id): Query<Option<Ulid>>,
-  ) -> Result<PoemJson<GetSessionsResult>, PoemError> {
+  ) -> Result<PoemJson<GetSessionsResponse>, PoemError> {
     let sessions = if session_id.is_some() {
       self.session_set.get_session(session_id).await?.once().collect()
     } else {
@@ -78,7 +63,7 @@ impl Server {
       .map(Session::status)
       .try_join_all()
       .await?
-      .convert::<GetSessionsResult>()
+      .convert::<GetSessionsResponse>()
       .poem_json()
       .ok()
   }
@@ -87,7 +72,7 @@ impl Server {
   async fn new_session(
     &self,
     PoemJson(command): PoemJson<NewSessionCommand>,
-  ) -> Result<PoemJson<NewSessionResult>, PoemError> {
+  ) -> Result<PoemJson<NewSessionResponse>, PoemError> {
     let session = self
       .session_set
       .new_session(command.lean_path, command.lean_server_log_dirpath)
@@ -95,7 +80,7 @@ impl Server {
 
     session.initialize().await?;
 
-    session.id().convert::<NewSessionResult>().poem_json().ok()
+    session.id().convert::<NewSessionResponse>().poem_json().ok()
   }
 
   #[oai(path = "/session/open", method = "post")]
@@ -114,14 +99,14 @@ impl Server {
   async fn notifications(
     &self,
     Query(session_id): Query<Option<Ulid>>,
-  ) -> Result<PoemJson<GetNotificationsResult>, PoemError> {
+  ) -> Result<PoemJson<GetNotificationsResponse>, PoemError> {
     self
       .session_set
       .get_session(session_id)
       .await?
       .notifications()
       .await?
-      .convert::<GetNotificationsResult>()
+      .convert::<GetNotificationsResponse>()
       .poem_json()
       .ok()
   }

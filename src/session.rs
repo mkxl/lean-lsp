@@ -7,7 +7,7 @@ use ulid::Ulid;
 
 use crate::{
   commands::SessionCommand,
-  server::GetNotificationsResult,
+  server::responses::GetNotificationsResponse,
   session_runner::SessionRunner,
   types::{GetPlainGoalsResult, Location, SessionStatus},
 };
@@ -77,7 +77,7 @@ impl Session {
   }
 
   // TODO-8dffbb
-  pub async fn notifications(&self) -> Result<GetNotificationsResult, AnyhowError> {
+  pub async fn notifications(&self) -> Result<GetNotificationsResponse, AnyhowError> {
     let (sender, receiver) = tokio::sync::oneshot::channel();
     let get_notifications_command = SessionCommand::GetNotifications { sender };
 

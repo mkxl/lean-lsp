@@ -5,7 +5,10 @@ use ulid::Ulid;
 
 use crate::{
   commands::{NewSessionCommand, OpenFileCommand},
-  server::{GetNotificationsResult, GetSessionsResult, NewSessionResult, Server},
+  server::{
+    Server,
+    responses::{GetNotificationsResponse, GetSessionsResponse, NewSessionResponse},
+  },
   types::{GetPlainGoalsResult, Location, SessionSetStatus},
 };
 
@@ -30,7 +33,7 @@ impl Client {
     std::format!("http://{url}:{port}{path}", url = Server::IPV4_ADDR, port = self.port)
   }
 
-  pub async fn new_session(&self, command: &NewSessionCommand) -> Result<NewSessionResult, AnyhowError> {
+  pub async fn new_session(&self, command: &NewSessionCommand) -> Result<NewSessionResponse, AnyhowError> {
     let url = self.url(Server::PATH_NEW_SESSION);
 
     self
@@ -41,7 +44,7 @@ impl Client {
       .await?
       .check_status()
       .await?
-      .json::<NewSessionResult>()
+      .json::<NewSessionResponse>()
       .await?
       .ok()
   }
@@ -62,7 +65,7 @@ impl Client {
       .ok()
   }
 
-  pub async fn notifications(&self, session_id: Option<Ulid>) -> Result<GetNotificationsResult, AnyhowError> {
+  pub async fn notifications(&self, session_id: Option<Ulid>) -> Result<GetNotificationsResponse, AnyhowError> {
     let url = self.url(Server::PATH_GET_NOTIFICATIONS);
 
     self
@@ -73,12 +76,12 @@ impl Client {
       .await?
       .check_status()
       .await?
-      .json::<GetNotificationsResult>()
+      .json::<GetNotificationsResponse>()
       .await?
       .ok()
   }
 
-  pub async fn get(&self, session_id: Option<Ulid>) -> Result<GetSessionsResult, AnyhowError> {
+  pub async fn get(&self, session_id: Option<Ulid>) -> Result<GetSessionsResponse, AnyhowError> {
     let url = self.url(Server::PATH_GET_SESSIONS);
 
     self
@@ -89,7 +92,7 @@ impl Client {
       .await?
       .check_status()
       .await?
-      .json::<GetSessionsResult>()
+      .json::<GetSessionsResponse>()
       .await?
       .ok()
   }

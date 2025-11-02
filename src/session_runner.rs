@@ -15,7 +15,7 @@ use crate::{
   commands::SessionCommand,
   lean_server::LeanServer,
   messages::{Id, Message},
-  server::GetNotificationsResult,
+  server::responses::GetNotificationsResponse,
   types::{GetPlainGoalsResult, Location, SessionStatus},
 };
 
@@ -150,8 +150,8 @@ impl SessionRunner {
     SessionStatus { id, process }
   }
 
-  pub fn get_notifications(&mut self) -> GetNotificationsResult {
-    self.notifications.mem_take().convert::<GetNotificationsResult>()
+  pub fn get_notifications(&mut self) -> GetNotificationsResponse {
+    self.notifications.mem_take().convert::<GetNotificationsResponse>()
   }
 
   #[tracing::instrument(skip_all)]
