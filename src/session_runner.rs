@@ -205,7 +205,7 @@ impl SessionRunner {
       .ok();
     };
 
-    tracing::info!(message = response.to_value(), %request, "received response for request");
+    tracing::info!(received_response = response.to_value(), %request, "received response for request");
 
     match request {
       Request::Initialize(sender) => {
@@ -224,11 +224,11 @@ impl SessionRunner {
   }
 
   fn process_request(&mut self, _id: usize, request: Json) {
-    tracing::info!(request = request.to_value(), "received request");
+    tracing::info!(received_request = request.to_value(), "received request");
   }
 
   fn process_notification(&mut self, notification: Json) {
-    tracing::info!(notification = notification.to_value(), "received notification");
+    tracing::info!(received_notification = notification.to_value(), "received notification");
 
     self.notifications.push(notification);
   }
