@@ -3,14 +3,22 @@ pub mod responses;
 use std::{net::Ipv4Addr, path::PathBuf};
 
 use anyhow::Error as AnyhowError;
+use futures::StreamExt;
 use mkutils::Utils;
-use poem::{EndpointExt, Error as PoemError, Route, Server as PoemServer, listener::TcpListener, middleware::Tracing};
-use poem_openapi::{OpenApi, OpenApiService, param::Query, payload::Json as PoemJson};
+use poem::{
+  Body as PoemBody, EndpointExt, Error as PoemError, Route, Server as PoemServer, listener::TcpListener,
+  middleware::Tracing,
+};
+use poem_openapi::{
+  OpenApi, OpenApiService,
+  param::Query,
+  payload::{Binary as PoemBinary, Json as PoemJson},
+};
 use ulid::Ulid;
 
 use crate::{
   commands::{CloseFileCommand, NewSessionCommand, OpenFileCommand},
-  server::responses::{GetNotificationsResponse, GetPlainGoalsResponse, GetSessionsResponse, NewSessionResponse},
+  server::responses::{GetPlainGoalsResponse, GetSessionsResponse, NewSessionResponse},
   session::Session,
   session_set::SessionSet,
   types::{Location, SessionSetStatus},
@@ -109,18 +117,20 @@ impl Server {
   }
 
   #[oai(path = "/session/notifications", method = "get")]
-  async fn notifications(
-    &self,
-    Query(session_id): Query<Option<Ulid>>,
-  ) -> Result<PoemJson<GetNotificationsResponse>, PoemError> {
+  async fn notifications(&self, Query(session_id): Query<Option<Ulid>>) -> Result<PoemBinary<PoemBody>, PoemError> {
     self
       .session_set
       .get_session(session_id)
       .await?
       .notifications()
-      .await?
-      .convert::<GetNotificationsResponse>()
-      .poem_json()
+      .map(|notification_res| match notification_res {
+        Ok(notification_json) => match notification_json.to_json_byte_str() {
+          Ok(byte_str) => byte_str.pushed(b'\n').ok(),
+          Err(serde_json_err) => serde_json_err.io_error().err(),
+        },
+        Err(recv_error) => recv_error.io_error().err(),
+      })
+      .poem_stream_body()
       .ok()
   }
 

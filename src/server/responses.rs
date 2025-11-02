@@ -1,7 +1,6 @@
 use derive_more::From;
 use poem_openapi::Object;
 use serde::{Deserialize, Serialize};
-use serde_json::Value as Json;
 use ulid::Ulid;
 
 use crate::types::{PlainGoals, SessionStatus};
@@ -14,11 +13,6 @@ pub struct NewSessionResponse {
 #[derive(Deserialize, From, Object)]
 pub struct GetSessionsResponse {
   pub sessions: Vec<SessionStatus>,
-}
-
-#[derive(Deserialize, From, Object, Serialize)]
-pub struct GetNotificationsResponse {
-  pub notifications: Vec<Json>,
 }
 
 #[derive(Deserialize, Object, Serialize)]

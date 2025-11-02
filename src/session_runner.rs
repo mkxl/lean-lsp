@@ -7,7 +7,10 @@ use anyhow::Error as AnyhowError;
 use mkutils::{IntoStream, ToValue, Utils};
 use serde_json::Value as Json;
 use strum::Display;
-use tokio::sync::{mpsc::UnboundedReceiver as MpscUnboundedReceiver, oneshot::Sender as OneshotSender};
+use tokio::sync::{
+  broadcast::Sender as BroadcastSender, mpsc::UnboundedReceiver as MpscUnboundedReceiver,
+  oneshot::Sender as OneshotSender,
+};
 use tokio_stream::wrappers::UnboundedReceiverStream as MpscUnboundedReceiverStream;
 use ulid::Ulid;
 
@@ -15,7 +18,7 @@ use crate::{
   commands::SessionCommand,
   lean_server::LeanServer,
   messages::{Id, Message},
-  server::responses::{GetNotificationsResponse, GetPlainGoalsResponse},
+  server::responses::GetPlainGoalsResponse,
   types::{Location, SessionStatus},
 };
 
@@ -40,7 +43,7 @@ pub struct SessionRunner {
   project_dirpath: PathBuf,
   commands: MpscUnboundedReceiverStream<SessionCommand>,
   requests: HashMap<Id, Request>,
-  notifications: Vec<Json>,
+  notifications: BroadcastSender<Json>,
   open_file_versions: HashMap<PathBuf, usize>,
 }
 
@@ -50,6 +53,7 @@ impl SessionRunner {
   pub fn new(
     id: Ulid,
     commands: MpscUnboundedReceiver<SessionCommand>,
+    notifications: BroadcastSender<Json>,
     lean_path: &Path,
     lean_server_log_dirpath: Option<&Path>,
   ) -> Result<Self, AnyhowError> {
@@ -57,7 +61,6 @@ impl SessionRunner {
     let project_dirpath = Self::project_dirpath(lean_path)?;
     let lean_server = LeanServer::new(&project_dirpath, lean_server_log_dirpath)?;
     let requests = HashMap::default();
-    let notifications = Vec::default();
     let open_file_versions = HashMap::new();
     let session_runner = Self {
       id,
@@ -175,10 +178,6 @@ impl SessionRunner {
     SessionStatus { id, process }
   }
 
-  pub fn get_notifications(&mut self) -> GetNotificationsResponse {
-    self.notifications.mem_take().convert::<GetNotificationsResponse>()
-  }
-
   #[tracing::instrument(skip_all)]
   async fn process_command(&mut self, session_command: SessionCommand) -> Result<(), AnyhowError> {
     match session_command {
@@ -187,7 +186,6 @@ impl SessionRunner {
       SessionCommand::CloseFile { sender, filepath } => self.close_file(&filepath).send_to_oneshot(sender),
       SessionCommand::GetPlainGoals { sender, location } => self.get_plain_goals(sender, &location),
       SessionCommand::GetStatus { sender } => self.get_status().send_to_oneshot(sender),
-      SessionCommand::GetNotifications { sender } => self.get_notifications().send_to_oneshot(sender),
     }
   }
 
@@ -215,16 +213,16 @@ impl SessionRunner {
     tracing::info!(received_request = request.to_value(), "received request");
   }
 
-  fn process_notification(&mut self, notification: Json) {
+  fn process_notification(&mut self, notification: Json) -> Result<(), AnyhowError> {
     tracing::info!(received_notification = notification.to_value(), "received notification");
 
-    self.notifications.push(notification);
+    self.notifications.send(notification)?.unit().ok()
   }
 
   fn process_message(&mut self, message: Json) -> Result<(), AnyhowError> {
     tracing::info!(received_message = message.to_value(), "received message");
 
-    let Some(id) = message.get("id") else { return self.process_notification(message).ok() };
+    let Some(id) = message.get("id") else { return self.process_notification(message) };
     let id = id.to_value_from_value::<Id>()?;
 
     if let Some(request) = self.requests.remove(&id) {
