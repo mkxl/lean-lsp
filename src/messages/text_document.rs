@@ -1,7 +1,8 @@
 use serde_json::Value as Json;
 
-const LEAN_LANGUAGE_ID: &str = "lean4";
 pub const INITIAL_TEXT_DOCUMENT_VERSION: usize = 0;
+
+const LEAN_LANGUAGE_ID: &str = "lean4";
 
 pub fn did_open_notification_params(text: &str, uri: &str) -> Json {
   serde_json::json!({

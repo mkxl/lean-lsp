@@ -59,7 +59,6 @@ impl NewSessionCommand {
 pub struct OpenFileCommand {
   #[arg(long)]
   pub session_id: Option<Ulid>,
-
   pub lean_filepath: PathBuf,
 }
 
@@ -67,9 +66,7 @@ pub struct OpenFileCommand {
 pub struct ChangeFileCommand {
   #[arg(long)]
   pub session_id: Option<Ulid>,
-
   pub lean_filepath: PathBuf,
-
   #[arg(long)]
   pub input_filepath: Option<PathBuf>,
 }
@@ -78,7 +75,6 @@ pub struct ChangeFileCommand {
 pub struct CloseFileCommand {
   #[arg(long)]
   pub session_id: Option<Ulid>,
-
   pub lean_filepath: PathBuf,
 }
 

@@ -18,7 +18,6 @@ use crate::{
 struct Get {
   #[arg(long, default_value_t = Server::DEFAULT_PORT)]
   port: u16,
-
   session_id: Option<Ulid>,
 }
 
@@ -38,7 +37,6 @@ impl Get {
 struct New {
   #[arg(long, default_value_t = Server::DEFAULT_PORT)]
   port: u16,
-
   #[command(flatten)]
   command: NewSessionCommand,
 }
@@ -58,7 +56,6 @@ impl New {
 struct File {
   #[arg(long, default_value_t = Server::DEFAULT_PORT)]
   port: u16,
-
   #[command(subcommand)]
   command: FileCommand,
 }
@@ -86,7 +83,6 @@ enum FileCommand {
 struct Notifications {
   #[arg(long, default_value_t = Server::DEFAULT_PORT)]
   port: u16,
-
   #[arg(long)]
   session_id: Option<Ulid>,
 }

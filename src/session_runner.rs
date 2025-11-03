@@ -144,17 +144,16 @@ impl SessionRunner {
 
   #[tracing::instrument(skip_all)]
   fn change_file(&mut self, filepath: &Path, text: &str) -> Result<(), AnyhowError> {
-    let Some(version) = self.open_file_versions.get_mut(filepath) else {
-      anyhow::bail!("file {} is not open", filepath.display());
-    };
+    let version = self
+      .open_file_versions
+      .get_mut(filepath)
+      .context_path("file is not open", filepath)?;
+    *version += 1;
 
-    let new_version = *version + 1;
     let uri = filepath.to_uri()?;
-    let text_document_did_change_notification = Message::text_document_did_change_notification(text, &uri, new_version);
+    let text_document_did_change_notification = Message::text_document_did_change_notification(text, &uri, *version);
 
     self.lean_server.send(text_document_did_change_notification)?;
-
-    *version = new_version;
 
     ().ok()
   }

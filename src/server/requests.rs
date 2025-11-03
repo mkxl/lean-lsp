@@ -11,9 +11,7 @@ use crate::commands::ChangeFileCommand;
 #[derive(Deserialize, Object, Serialize)]
 pub struct ChangeFileRequest {
   pub session_id: Option<Ulid>,
-
   pub lean_filepath: PathBuf,
-
   pub text: String,
 }
 
@@ -32,12 +30,12 @@ impl ChangeFileRequest {
       }
       None => tokio::io::stdin().buf_reader_async().read_string_async().await?,
     };
-
-    Self {
+    let change_file_request = Self {
       session_id,
       lean_filepath,
       text,
-    }
-    .ok()
+    };
+
+    change_file_request.ok()
   }
 }
