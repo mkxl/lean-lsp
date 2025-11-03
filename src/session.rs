@@ -1,13 +1,15 @@
 use std::path::{Path, PathBuf};
 
 use anyhow::Error as AnyhowError;
-use mkutils::Utils;
-use tokio::sync::mpsc::UnboundedSender as MpscUnboundedSender;
+use mkutils::{IntoStream, Utils};
+use serde_json::Value as Json;
+use tokio::sync::{broadcast::Sender as BroadcastSender, mpsc::UnboundedSender as MpscUnboundedSender};
+use tokio_stream::wrappers::BroadcastStream as BroadcastReceiverStream;
 use ulid::Ulid;
 
 use crate::{
   commands::SessionCommand,
-  server::responses::{GetNotificationsResponse, GetPlainGoalsResponse},
+  server::responses::GetPlainGoalsResponse,
   session_runner::SessionRunner,
   types::{Location, SessionStatus},
 };
@@ -16,17 +18,31 @@ use crate::{
 pub struct Session {
   id: Ulid,
   commands: MpscUnboundedSender<SessionCommand>,
+  notifications: BroadcastSender<Json>,
 }
 
 impl Session {
+  const NOTIFICATIONS_CAPACITY: usize = 32;
+
   pub fn new(
     lean_path: &Path,
     lean_server_log_dirpath: Option<&Path>,
   ) -> Result<(Session, SessionRunner), AnyhowError> {
     let id = Ulid::new();
     let (commands, runner_commands) = tokio::sync::mpsc::unbounded_channel();
-    let session_runner = SessionRunner::new(id, runner_commands, lean_path, lean_server_log_dirpath)?;
-    let session = Session { id, commands };
+    let (notifications, _notifications_receiver) = tokio::sync::broadcast::channel(Self::NOTIFICATIONS_CAPACITY);
+    let session_runner = SessionRunner::new(
+      id,
+      runner_commands,
+      notifications.clone(),
+      lean_path,
+      lean_server_log_dirpath,
+    )?;
+    let session = Session {
+      id,
+      commands,
+      notifications,
+    };
     let pair = session.pair(session_runner);
 
     pair.ok()
@@ -86,13 +102,7 @@ impl Session {
     receiver.await?.ok()
   }
 
-  // TODO-8dffbb
-  pub async fn notifications(&self) -> Result<GetNotificationsResponse, AnyhowError> {
-    let (sender, receiver) = tokio::sync::oneshot::channel();
-    let get_notifications_command = SessionCommand::GetNotifications { sender };
-
-    self.commands.send(get_notifications_command)?;
-
-    receiver.await?.ok()
+  pub fn notifications(&self) -> BroadcastReceiverStream<Json> {
+    self.notifications.subscribe().into_stream()
   }
 }

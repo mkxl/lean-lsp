@@ -10,7 +10,7 @@ use ulid::Ulid;
 
 use crate::{
   lean_server::LeanServer,
-  server::responses::{GetNotificationsResponse, GetPlainGoalsResponse},
+  server::responses::GetPlainGoalsResponse,
   session::Session,
   types::{Location, SessionStatus},
 };
@@ -33,9 +33,6 @@ pub enum SessionCommand {
   },
   GetStatus {
     sender: OneshotSender<SessionStatus>,
-  },
-  GetNotifications {
-    sender: OneshotSender<GetNotificationsResponse>,
   },
 }
 

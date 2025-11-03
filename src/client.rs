@@ -1,13 +1,15 @@
 use anyhow::Error as AnyhowError;
+use futures::{Stream, StreamExt};
 use mkutils::Utils;
 use reqwest::Client as ReqwestClient;
+use serde_json::Value as Json;
 use ulid::Ulid;
 
 use crate::{
   commands::{CloseFileCommand, NewSessionCommand, OpenFileCommand},
   server::{
     Server,
-    responses::{GetNotificationsResponse, GetPlainGoalsResponse, GetSessionsResponse, NewSessionResponse},
+    responses::{GetPlainGoalsResponse, GetSessionsResponse, NewSessionResponse},
   },
   types::{Location, SessionSetStatus},
 };
@@ -81,22 +83,6 @@ impl Client {
       .ok()
   }
 
-  pub async fn notifications(&self, session_id: Option<Ulid>) -> Result<GetNotificationsResponse, AnyhowError> {
-    let url = self.url(Server::PATH_GET_NOTIFICATIONS);
-
-    self
-      .http_client
-      .get(url)
-      .query_once::<Ulid, _>(Server::QUERY_PARAM_SESSION_ID, session_id)
-      .send()
-      .await?
-      .check_status()
-      .await?
-      .json::<GetNotificationsResponse>()
-      .await?
-      .ok()
-  }
-
   pub async fn get(&self, session_id: Option<Ulid>) -> Result<GetSessionsResponse, AnyhowError> {
     let url = self.url(Server::PATH_GET_SESSIONS);
 
@@ -110,6 +96,28 @@ impl Client {
       .await?
       .json::<GetSessionsResponse>()
       .await?
+      .ok()
+  }
+
+  pub async fn notifications(
+    &self,
+    session_id: Option<Ulid>,
+  ) -> Result<impl Stream<Item = Result<Json, AnyhowError>>, AnyhowError> {
+    let url = self.url(Server::PATH_GET_NOTIFICATIONS);
+
+    self
+      .http_client
+      .get(url)
+      .query_once::<Ulid, _>(Server::QUERY_PARAM_SESSION_ID, session_id)
+      .send()
+      .await?
+      .check_status()
+      .await?
+      .bytes_stream()
+      .map(Utils::io_result)
+      .into_stream_reader()
+      .into_line_frames()
+      .map(|line_res| line_res?.to_value_from_json_byte_str::<Json>()?.ok())
       .ok()
   }
 

@@ -2,6 +2,7 @@ use std::io::StdoutLock;
 
 use anyhow::Error as AnyhowError;
 use clap::{Args, Parser, Subcommand};
+use futures::StreamExt;
 use mkutils::{Tracing, Utils};
 use tracing_subscriber::filter::LevelFilter;
 use ulid::Ulid;
@@ -90,12 +91,14 @@ struct Notifications {
 
 impl Notifications {
   async fn run(self) -> Result<(), AnyhowError> {
-    Client::new(self.port)?
-      .notifications(self.session_id)
-      .await?
-      .to_json_str()?
-      .println()
-      .ok()
+    let client = Client::new(self.port)?;
+    let mut notifications = client.notifications(self.session_id).await?;
+
+    while let Some(notification_res) = notifications.next().await {
+      notification_res?.to_json_str()?.println();
+    }
+
+    ().ok()
   }
 }
 
