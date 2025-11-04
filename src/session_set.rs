@@ -25,40 +25,23 @@ impl SessionSet {
     Self { commands, join_handle }
   }
 
-  // TODO-8dffbb: extract out common functionality
   #[tracing::instrument(skip_all)]
   pub async fn new_session(
     &self,
     lean_path: PathBuf,
     lean_server_log_dirpath: Option<PathBuf>,
   ) -> Result<Session, AnyhowError> {
-    let (sender, receiver) = tokio::sync::oneshot::channel();
     let command = NewSessionCommand::new(lean_path, lean_server_log_dirpath);
-    let new_session_command = SessionSetCommand::NewSession { sender, command };
 
-    self.commands.send(new_session_command)?;
-
-    receiver.await?
+    crate::macros::run!(self, SessionSetCommand::NewSession, command)
   }
 
-  // TODO-8dffbb
   pub async fn get_sessions(&self) -> Result<Vec<Session>, AnyhowError> {
-    let (sender, receiver) = tokio::sync::oneshot::channel();
-    let get_sessions = SessionSetCommand::GetSessions { sender };
-
-    self.commands.send(get_sessions)?;
-
-    receiver.await?.ok()
+    crate::macros::run!(self, SessionSetCommand::GetSessions).ok()
   }
 
-  // TODO-8dffbb
   pub async fn get_session(&self, session_id: Option<Ulid>) -> Result<Session, AnyhowError> {
-    let (sender, receiver) = tokio::sync::oneshot::channel();
-    let get_session = SessionSetCommand::GetSession { sender, session_id };
-
-    self.commands.send(get_session)?;
-
-    receiver.await?
+    crate::macros::run!(self, SessionSetCommand::GetSession, session_id)
   }
 
   pub async fn status(&self) -> Result<SessionSetStatus, AnyhowError> {

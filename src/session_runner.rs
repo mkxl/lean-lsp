@@ -232,7 +232,6 @@ impl SessionRunner {
     }
   }
 
-  // TODO-8dffbb
   #[tracing::instrument(skip_all)]
   async fn result(mut self) -> Result<(), AnyhowError> {
     loop {
