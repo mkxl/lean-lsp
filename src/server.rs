@@ -4,17 +4,21 @@ pub mod responses;
 use std::{collections::HashSet, net::Ipv4Addr, path::PathBuf};
 
 use anyhow::Error as AnyhowError;
+use derive_more::From;
 use futures::StreamExt;
 use mkutils::Utils;
 use poem::{
-  Body as PoemBody, EndpointExt, Error as PoemError, Route, Server as PoemServer, listener::TcpListener,
+  Body as PoemBody, EndpointExt, Error as PoemError, Route, Server as PoemServer,
+  listener::TcpListener,
   middleware::Tracing,
+  web::websocket::{BoxWebSocketUpgraded, Message, WebSocket, WebSocketStream},
 };
 use poem_openapi::{
   OpenApi, OpenApiService,
   param::Query,
   payload::{Binary as PoemBinary, Json as PoemJson},
 };
+use tokio::task::JoinHandle;
 use ulid::Ulid;
 
 use crate::{
@@ -28,9 +32,10 @@ use crate::{
   types::{Location, SessionSetStatus},
 };
 
-#[derive(Default)]
+#[derive(From)]
 pub struct Server {
   session_set: SessionSet,
+  join_handle: JoinHandle<Result<(), AnyhowError>>,
 }
 
 #[OpenApi]
@@ -56,10 +61,29 @@ impl Server {
   const TITLE: &'static str = std::env!("CARGO_PKG_NAME");
   const VERSION: &'static str = std::env!("CARGO_PKG_VERSION");
 
+  fn new() -> Self {
+    SessionSet::new().into()
+  }
+
+  async fn session_set_status(&self) -> Result<SessionSetStatus, AnyhowError> {
+    let session_set = self.join_handle.is_finished().into();
+    let sessions = self
+      .session_set
+      .get_sessions()
+      .await?
+      .iter()
+      .map(Session::status)
+      .try_join_all()
+      .await?;
+    let session_set_status = SessionSetStatus::new(session_set, sessions);
+
+    session_set_status.ok()
+  }
+
   #[oai(path = "/status", method = "get")]
   #[allow(clippy::unused_async)]
-  async fn get(&self) -> Result<PoemJson<SessionSetStatus>, PoemError> {
-    self.session_set.status().await?.poem_json().ok()
+  async fn status(&self) -> Result<PoemJson<SessionSetStatus>, PoemError> {
+    self.session_set_status().await?.poem_json().ok()
   }
 
   #[oai(path = "/session", method = "get")]
@@ -185,9 +209,86 @@ impl Server {
     response.ok()
   }
 
+  async fn on_web_socket_upgrade(
+    session_set: SessionSet,
+    mut web_socket_stream: WebSocketStream,
+  ) -> Result<(), AnyhowError> {
+    loop {
+      let Message::Text(message) = web_socket_stream.next_item_async().await?? else { continue };
+      let mut message_json = message.to_json()?;
+      let session_id = message_json.take_json("session_id")?;
+      let response_json = match message_json.take_json::<String>("type")?.as_str() {
+        "new_session" => session_set
+          .new_session(
+            message_json.take_json("lean_path")?,
+            message_json.take_json("lean_server_log_dirpath")?,
+          )
+          .await?
+          .id()
+          .to_json_object("session_id"),
+        "get_sessions" => session_set
+          .get_sessions()
+          .await?
+          .iter()
+          .map_collect::<Ulid, Vec<_>>(Session::id)
+          .to_json_object("session_ids"),
+        "get_session" => session_set
+          .get_session(session_id)
+          .await?
+          .id()
+          .to_json_object("session_id"),
+        "initialize" => session_set
+          .get_session(session_id)
+          .await?
+          .initialize()
+          .await?
+          .with("complete")
+          .to_json_object("initialize"),
+        "open_file" => session_set
+          .get_session(session_id)
+          .await?
+          .open_file(message_json.take_json("filepath")?)
+          .await?
+          .with("complete")
+          .to_json_object("open_file"),
+        "close_file" => session_set
+          .get_session(session_id)
+          .await?
+          .close_file(message_json.take_json("filepath")?)
+          .await?
+          .with("complete")
+          .to_json_object("close_file"),
+        "get_plain_goals" => session_set
+          .get_session(session_id)
+          .await?
+          .get_plain_goals(message_json.take_json("location")?)
+          .await?
+          .to_json()?,
+        "get_status" => session_set.get_session(session_id).await?.status().await?.to_json()?,
+        _ => serde_json::json!({"error": "unknown type"}),
+      };
+
+      response_json
+        .to_json_str()?
+        .poem_text_message()
+        .send_to(&mut web_socket_stream)
+        .await?;
+    }
+  }
+
+  #[allow(clippy::unused_async)]
+  #[oai(path = "/stream", method = "get")]
+  async fn stream(&self, web_socket: WebSocket) -> BoxWebSocketUpgraded {
+    let session_set = self.session_set.clone();
+    let web_socket_upgraded =
+      web_socket.on_upgrade(|web_socket_stream| Self::on_web_socket_upgrade(session_set, web_socket_stream));
+
+    web_socket_upgraded.boxed()
+  }
+
   pub async fn serve(port: u16) -> Result<(), AnyhowError> {
     let listener = TcpListener::bind((Self::IPV4_ADDR, port));
-    let open_api_service = OpenApiService::new(Self::default(), Self::TITLE, Self::VERSION);
+    let open_api_service = OpenApiService::new(Self::new(), Self::TITLE, Self::VERSION);
     let open_api_endpoint = open_api_service.spec_yaml().into_endpoint();
     let endpoint = Route::new()
       .nest(Self::PATH_ROOT, open_api_service)
