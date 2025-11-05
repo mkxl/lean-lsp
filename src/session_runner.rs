@@ -148,12 +148,15 @@ impl SessionRunner {
       .open_file_versions
       .get_mut(filepath)
       .context_path("file is not open", filepath)?;
-    *version += 1;
+    let new_version = *version + 1;
 
     let uri = filepath.to_uri()?;
-    let text_document_did_change_notification = Message::text_document_did_change_notification(text, &uri, *version);
+    let text_document_did_change_notification = Message::text_document_did_change_notification(text, &uri, new_version);
 
     self.lean_server.send(text_document_did_change_notification)?;
+
+    // only increment the version if the request was successfully sent
+    *version += 1;
 
     ().ok()
   }
