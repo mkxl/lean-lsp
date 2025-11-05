@@ -60,6 +60,10 @@ impl Session {
     crate::macros::run_command!(self, SessionCommand::OpenFile, filepath)
   }
 
+  pub async fn change_file(&self, filepath: PathBuf, text: String) -> Result<(), AnyhowError> {
+    crate::macros::run_command!(self, SessionCommand::ChangeFile, filepath, text)
+  }
+  
   pub async fn close_file(&self, filepath: PathBuf) -> Result<(), AnyhowError> {
     crate::macros::run_command!(self, SessionCommand::CloseFile, filepath)
   }

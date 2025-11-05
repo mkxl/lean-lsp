@@ -9,7 +9,7 @@ use ulid::Ulid;
 
 use crate::{
   client::Client,
-  commands::{CloseFileCommand, NewSessionCommand, OpenFileCommand},
+  commands::{ChangeFileCommand, CloseFileCommand, NewSessionCommand, OpenFileCommand},
   server::Server,
   types::Location,
 };
@@ -18,7 +18,6 @@ use crate::{
 struct Get {
   #[arg(long, default_value_t = Server::DEFAULT_PORT)]
   port: u16,
-
   session_id: Option<Ulid>,
 }
 
@@ -38,7 +37,6 @@ impl Get {
 struct New {
   #[arg(long, default_value_t = Server::DEFAULT_PORT)]
   port: u16,
-
   #[command(flatten)]
   command: NewSessionCommand,
 }
@@ -58,7 +56,6 @@ impl New {
 struct File {
   #[arg(long, default_value_t = Server::DEFAULT_PORT)]
   port: u16,
-
   #[command(subcommand)]
   command: FileCommand,
 }
@@ -69,6 +66,7 @@ impl File {
 
     match self.command {
       FileCommand::Open(open_command) => client.open_file(&open_command).await?.ok(),
+      FileCommand::Change(change_command) => client.change_file(change_command).await?.ok(),
       FileCommand::Close(close_command) => client.close_file(&close_command).await?.ok(),
     }
   }
@@ -77,6 +75,7 @@ impl File {
 #[derive(Subcommand)]
 enum FileCommand {
   Open(OpenFileCommand),
+  Change(ChangeFileCommand),
   Close(CloseFileCommand),
 }
 
@@ -84,7 +83,6 @@ enum FileCommand {
 struct Notifications {
   #[arg(long, default_value_t = Server::DEFAULT_PORT)]
   port: u16,
-
   #[arg(long)]
   session_id: Option<Ulid>,
 }

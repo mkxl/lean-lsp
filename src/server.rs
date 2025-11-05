@@ -1,3 +1,4 @@
+pub mod requests;
 pub mod responses;
 
 use std::{net::Ipv4Addr, path::PathBuf};
@@ -18,7 +19,10 @@ use ulid::Ulid;
 
 use crate::{
   commands::{CloseFileCommand, NewSessionCommand, OpenFileCommand},
-  server::responses::{GetPlainGoalsResponse, GetSessionsResponse, NewSessionResponse},
+  server::{
+    requests::ChangeFileRequest,
+    responses::{GetPlainGoalsResponse, GetSessionsResponse, NewSessionResponse},
+  },
   session::Session,
   session_set::SessionSet,
   types::{Location, SessionSetStatus},
@@ -33,6 +37,7 @@ pub struct Server {
 impl Server {
   pub const DEFAULT_PORT: u16 = 8080;
   pub const IPV4_ADDR: Ipv4Addr = Ipv4Addr::UNSPECIFIED;
+  pub const PATH_FILE_CHANGE: &'static str = "/session/file/change";
   pub const PATH_FILE_CLOSE: &'static str = "/session/file/close";
   pub const PATH_FILE_OPEN: &'static str = "/session/file/open";
   pub const PATH_GET_NOTIFICATIONS: &'static str = "/session/notifications";
@@ -99,6 +104,18 @@ impl Server {
       .get_session(command.session_id)
       .await?
       .open_file(command.lean_filepath)
+      .await?
+      .poem_json()
+      .ok()
+  }
+
+  #[oai(path = "/session/file/change", method = "post")]
+  async fn change_file(&self, PoemJson(command): PoemJson<ChangeFileRequest>) -> Result<PoemJson<()>, PoemError> {
+    self
+      .session_set
+      .get_session(command.session_id)
+      .await?
+      .change_file(command.lean_filepath, command.text)
       .await?
       .poem_json()
       .ok()

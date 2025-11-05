@@ -23,6 +23,11 @@ pub enum SessionCommand {
     sender: OneshotSender<Result<(), AnyhowError>>,
     filepath: PathBuf,
   },
+  ChangeFile {
+    sender: OneshotSender<Result<(), AnyhowError>>,
+    filepath: PathBuf,
+    text: String,
+  },
   CloseFile {
     sender: OneshotSender<Result<(), AnyhowError>>,
     filepath: PathBuf,
@@ -54,15 +59,22 @@ impl NewSessionCommand {
 pub struct OpenFileCommand {
   #[arg(long)]
   pub session_id: Option<Ulid>,
-
   pub lean_filepath: PathBuf,
+}
+
+#[derive(Args)]
+pub struct ChangeFileCommand {
+  #[arg(long)]
+  pub session_id: Option<Ulid>,
+  pub lean_filepath: PathBuf,
+  #[arg(long)]
+  pub input_filepath: Option<PathBuf>,
 }
 
 #[derive(Args, Constructor, Deserialize, Object, Serialize)]
 pub struct CloseFileCommand {
   #[arg(long)]
   pub session_id: Option<Ulid>,
-
   pub lean_filepath: PathBuf,
 }
 

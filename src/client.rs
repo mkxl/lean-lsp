@@ -6,9 +6,10 @@ use serde_json::Value as Json;
 use ulid::Ulid;
 
 use crate::{
-  commands::{CloseFileCommand, NewSessionCommand, OpenFileCommand},
+  commands::{ChangeFileCommand, CloseFileCommand, NewSessionCommand, OpenFileCommand},
   server::{
     Server,
+    requests::ChangeFileRequest,
     responses::{GetPlainGoalsResponse, GetSessionsResponse, NewSessionResponse},
   },
   types::{Location, SessionSetStatus},
@@ -58,6 +59,23 @@ impl Client {
       .http_client
       .post(url)
       .json(command)
+      .send()
+      .await?
+      .check_status()
+      .await?
+      .json::<()>()
+      .await?
+      .ok()
+  }
+
+  pub async fn change_file(&self, command: ChangeFileCommand) -> Result<(), AnyhowError> {
+    let url = self.url(Server::PATH_FILE_CHANGE);
+    let request = ChangeFileRequest::new(command).await?;
+
+    self
+      .http_client
+      .post(url)
+      .json(&request)
       .send()
       .await?
       .check_status()

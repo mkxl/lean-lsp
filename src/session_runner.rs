@@ -17,7 +17,7 @@ use ulid::Ulid;
 use crate::{
   commands::SessionCommand,
   lean_server::LeanServer,
-  messages::{Id, Message},
+  messages::{Id, Message, text_document::INITIAL_TEXT_DOCUMENT_VERSION},
   server::responses::GetPlainGoalsResponse,
   types::{Location, SessionStatus},
 };
@@ -137,7 +137,26 @@ impl SessionRunner {
     self.send_request(text_document_folding_range_request, Request::TextDocumentFoldingRange)?;
     self.send_request(lean_rpc_connect_request, Request::LeanRpcConnect)?;
 
-    self.open_file_versions.insert(filepath, 0);
+    self.open_file_versions.insert(filepath, INITIAL_TEXT_DOCUMENT_VERSION);
+
+    ().ok()
+  }
+
+  #[tracing::instrument(skip_all)]
+  fn change_file(&mut self, filepath: &Path, text: &str) -> Result<(), AnyhowError> {
+    let version = self
+      .open_file_versions
+      .get_mut(filepath)
+      .context_path("file is not open", filepath)?;
+    let new_version = *version + 1;
+
+    let uri = filepath.to_uri()?;
+    let text_document_did_change_notification = Message::text_document_did_change_notification(text, &uri, new_version);
+
+    self.lean_server.send(text_document_did_change_notification)?;
+
+    // only increment the version if the request was successfully sent
+    *version += 1;
 
     ().ok()
   }
@@ -183,6 +202,9 @@ impl SessionRunner {
     match session_command {
       SessionCommand::Initialize { sender } => self.initialize(sender),
       SessionCommand::OpenFile { sender, filepath } => self.open_file(filepath).await.send_to_oneshot(sender),
+      SessionCommand::ChangeFile { sender, filepath, text } => {
+        self.change_file(&filepath, &text).send_to_oneshot(sender)
+      }
       SessionCommand::CloseFile { sender, filepath } => self.close_file(&filepath).send_to_oneshot(sender),
       SessionCommand::GetPlainGoals { sender, location } => self.get_plain_goals(sender, &location),
       SessionCommand::GetStatus { sender } => self.get_status().send_to_oneshot(sender),
