@@ -1379,7 +1379,7 @@ dependencies = [
 [[package]]
 name = "mkutils"
 version = "0.1.0"
-source = "git+https://github.com/mkxl/mkutils-rs?rev=67171647960b62d424b7376ace02497b9832c3e0#67171647960b62d424b7376ace02497b9832c3e0"
+source = "git+https://github.com/mkxl/mkutils-rs?rev=864f51210d94e806a50d798de554b0b84e54366f#864f51210d94e806a50d798de554b0b84e54366f"
 dependencies = [
  "anyhow",
  "bytes",
@@ -1409,7 +1409,7 @@ dependencies = [
 [[package]]
 name = "mkutils-macros"
 version = "0.1.0"
-source = "git+https://github.com/mkxl/mkutils-rs?rev=67171647960b62d424b7376ace02497b9832c3e0#67171647960b62d424b7376ace02497b9832c3e0"
+source = "git+https://github.com/mkxl/mkutils-rs?rev=864f51210d94e806a50d798de554b0b84e54366f#864f51210d94e806a50d798de554b0b84e54366f"
 dependencies = [
  "proc-macro2",
  "quote",

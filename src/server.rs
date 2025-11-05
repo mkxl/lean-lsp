@@ -128,23 +128,14 @@ impl Server {
       .get_session(session_id)
       .await?
       .notifications()
-      .filter_map(move |notification_json_res| {
-        match notification_json_res {
-          Ok(notification_json) => {
-            if methods.is_empty() {
-              notification_json.ok().some()
-            } else if let Some(method_json) = notification_json.get("method")
-              && let Some(method) = method_json.as_str()
-              && methods.contains(method)
-            {
-              notification_json.ok().some()
-            } else {
-              None
-            }
-          }
-          Err(recv_err) => recv_err.err().some(),
+      .filter_sync(move |notification_json_res| {
+        !mkutils::when! {
+          !methods.is_empty()
+            && let Ok(notification_json) = notification_json_res
+            && let Some(method_json) = notification_json.get("method")
+            && let Some(method) = method_json.as_str()
+            && !methods.contains(method)
         }
-        .ready()
       })
       .map(|notification_json_res| {
         notification_json_res?
