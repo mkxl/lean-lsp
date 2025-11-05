@@ -2,7 +2,10 @@ use std::{collections::HashMap, path::Path};
 
 use anyhow::{Context, Error as AnyhowError};
 use mkutils::{IntoStream, Utils};
-use tokio::{sync::mpsc::UnboundedReceiver as MpscUnboundedReceiver, task::JoinSet};
+use tokio::{
+  sync::mpsc::UnboundedReceiver as MpscUnboundedReceiver,
+  task::{JoinError, JoinSet},
+};
 use tokio_stream::wrappers::UnboundedReceiverStream as MpscUnboundedReceiverStream;
 use ulid::Ulid;
 
@@ -73,17 +76,20 @@ impl SessionSetRunner {
     tracing::info!(session_id = %session_result.id, "cleaned up session");
   }
 
-  // TODO-8dffbb
+  async fn process_session_result(&mut self, session_result_res_opt: Option<Result<SessionResult, JoinError>>) {
+    match session_result_res_opt {
+      Some(Ok(session_result)) => self.cleanup_session(session_result),
+      Some(Err(join_error)) => tracing::warn!(%join_error, "session run task failed to execute to completion"),
+      None => tokio::task::yield_now().await,
+    }
+  }
+
   #[tracing::instrument(skip_all)]
   pub async fn run(mut self) -> Result<(), AnyhowError> {
     loop {
       tokio::select! {
         session_set_command_res = self.commands.next_item_async() => self.process_command(session_set_command_res?).await.context("error processing command").log_if_error().unit(),
-        session_result_res = self.session_results.join_next() => match session_result_res {
-          Some(Ok(session_result)) => self.cleanup_session(session_result),
-          Some(Err(join_error)) => tracing::warn!(%join_error, "session run task failed to execute to completion"),
-          None => tokio::task::yield_now().await,
-        }
+        session_result_res_opt = self.session_results.join_next() => self.process_session_result(session_result_res_opt).await,
       }
     }
   }
