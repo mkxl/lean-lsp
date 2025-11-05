@@ -1,7 +1,7 @@
 pub mod requests;
 pub mod responses;
 
-use std::{net::Ipv4Addr, path::PathBuf};
+use std::{collections::HashSet, net::Ipv4Addr, path::PathBuf};
 
 use anyhow::Error as AnyhowError;
 use futures::StreamExt;
@@ -48,6 +48,7 @@ impl Server {
   pub const QUERY_PARAM_CHARACTER: &'static str = "character";
   pub const QUERY_PARAM_FILEPATH: &'static str = "filepath";
   pub const QUERY_PARAM_LINE: &'static str = "line";
+  pub const QUERY_PARAM_METHODS: &'static str = "methods";
   pub const QUERY_PARAM_SESSION_ID: &'static str = "session_id";
 
   const PATH_OPEN_API: &'static str = "/openapi";
@@ -134,19 +135,32 @@ impl Server {
   }
 
   #[oai(path = "/session/notifications", method = "get")]
-  async fn notifications(&self, Query(session_id): Query<Option<Ulid>>) -> Result<PoemBinary<PoemBody>, PoemError> {
+  async fn notifications(
+    &self,
+    Query(session_id): Query<Option<Ulid>>,
+    Query(methods): Query<HashSet<String>>,
+  ) -> Result<PoemBinary<PoemBody>, PoemError> {
     self
       .session_set
       .get_session(session_id)
       .await?
       .notifications()
-      .map(|notification_res| match notification_res {
-        Ok(notification_json) => match notification_json.to_json_byte_str() {
-          Ok(byte_str) => byte_str.pushed(b'\n').ok(),
-          Err(serde_json_err) => serde_json_err.io_error().err(),
-        },
-        Err(recv_error) => recv_error.io_error().err(),
+      .filter_sync(move |notification_json_res| {
+        !mkutils::when! {
+          !methods.is_empty()
+            && let Ok(notification_json) = notification_json_res
+            && let Some(method_json) = notification_json.get("method")
+            && let Some(method) = method_json.as_str()
+            && !methods.contains(method)
+        }
       })
+      .map(|notification_json_res| {
+        notification_json_res?
+          .to_json_byte_str()?
+          .pushed(b'\n')
+          .ok::<AnyhowError>()
+      })
+      .map(Utils::io_result)
       .poem_stream_body()
       .ok()
   }

@@ -85,12 +85,15 @@ struct Notifications {
   port: u16,
   #[arg(long)]
   session_id: Option<Ulid>,
+
+  #[arg(long = "method")]
+  methods: Vec<String>,
 }
 
 impl Notifications {
   async fn run(self) -> Result<(), AnyhowError> {
     let client = Client::new(self.port)?;
-    let mut notifications = client.notifications(self.session_id).await?;
+    let mut notifications = client.notifications(self.session_id, &self.methods).await?;
 
     while let Some(notification_res) = notifications.next().await {
       notification_res?.to_json_str()?.println();

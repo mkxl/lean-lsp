@@ -2,6 +2,7 @@ use anyhow::Error as AnyhowError;
 use futures::{Stream, StreamExt};
 use mkutils::Utils;
 use reqwest::Client as ReqwestClient;
+use serde::Serialize;
 use serde_json::Value as Json;
 use ulid::Ulid;
 
@@ -107,7 +108,7 @@ impl Client {
     self
       .http_client
       .get(url)
-      .query_once::<Ulid, _>(Server::QUERY_PARAM_SESSION_ID, session_id)
+      .query_one::<Ulid>(Server::QUERY_PARAM_SESSION_ID, session_id)
       .send()
       .await?
       .check_status()
@@ -117,16 +118,18 @@ impl Client {
       .ok()
   }
 
-  pub async fn notifications(
+  pub async fn notifications<T: Serialize>(
     &self,
     session_id: Option<Ulid>,
+    methods: &[T],
   ) -> Result<impl Stream<Item = Result<Json, AnyhowError>>, AnyhowError> {
     let url = self.url(Server::PATH_GET_NOTIFICATIONS);
 
     self
       .http_client
       .get(url)
-      .query_once::<Ulid, _>(Server::QUERY_PARAM_SESSION_ID, session_id)
+      .query_one::<Ulid>(Server::QUERY_PARAM_SESSION_ID, session_id)
+      .query_all(Server::QUERY_PARAM_METHODS, methods)
       .send()
       .await?
       .check_status()
@@ -149,10 +152,10 @@ impl Client {
     self
       .http_client
       .get(url)
-      .query_once::<Ulid, _>(Server::QUERY_PARAM_SESSION_ID, session_id)
-      .query_once(Server::QUERY_PARAM_FILEPATH, location.filepath)
-      .query_once(Server::QUERY_PARAM_LINE, location.line)
-      .query_once(Server::QUERY_PARAM_CHARACTER, location.character)
+      .query_one::<Ulid>(Server::QUERY_PARAM_SESSION_ID, session_id)
+      .query_one(Server::QUERY_PARAM_FILEPATH, location.filepath)
+      .query_one(Server::QUERY_PARAM_LINE, location.line)
+      .query_one(Server::QUERY_PARAM_CHARACTER, location.character)
       .send()
       .await?
       .check_status()

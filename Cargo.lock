@@ -371,6 +371,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "convert_case"
+version = "0.7.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bb402b8d4c85569410425650ce3eddc7d698ed96d39a73f941b08fb63082f1e7"
+dependencies = [
+ "unicode-segmentation",
+]
+
+[[package]]
 name = "core-foundation"
 version = "0.9.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -516,6 +525,7 @@ version = "2.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bda628edc44c4bb645fbe0f758797143e4e07926f7ebf4e9bdfbd3d2ce621df3"
 dependencies = [
+ "convert_case",
  "proc-macro2",
  "quote",
  "syn",
@@ -1369,7 +1379,7 @@ dependencies = [
 [[package]]
 name = "mkutils"
 version = "0.1.0"
-source = "git+https://github.com/mkxl/mkutils-rs?rev=ee4a6280d839e530b5cd074c17353cee70a1aff9#ee4a6280d839e530b5cd074c17353cee70a1aff9"
+source = "git+https://github.com/mkxl/mkutils-rs?rev=864f51210d94e806a50d798de554b0b84e54366f#864f51210d94e806a50d798de554b0b84e54366f"
 dependencies = [
  "anyhow",
  "bytes",
@@ -1399,7 +1409,7 @@ dependencies = [
 [[package]]
 name = "mkutils-macros"
 version = "0.1.0"
-source = "git+https://github.com/mkxl/mkutils-rs?rev=ee4a6280d839e530b5cd074c17353cee70a1aff9#ee4a6280d839e530b5cd074c17353cee70a1aff9"
+source = "git+https://github.com/mkxl/mkutils-rs?rev=864f51210d94e806a50d798de554b0b84e54366f#864f51210d94e806a50d798de554b0b84e54366f"
 dependencies = [
  "proc-macro2",
  "quote",
