@@ -53,23 +53,23 @@ impl Session {
   }
 
   pub async fn initialize(&self) -> Result<(), AnyhowError> {
-    crate::macros::run!(self, SessionCommand::Initialize).ok()
+    crate::macros::run_command!(self, SessionCommand::Initialize).ok()
   }
 
   pub async fn open_file(&self, filepath: PathBuf) -> Result<(), AnyhowError> {
-    crate::macros::run!(self, SessionCommand::OpenFile, filepath)
+    crate::macros::run_command!(self, SessionCommand::OpenFile, filepath)
   }
 
   pub async fn close_file(&self, filepath: PathBuf) -> Result<(), AnyhowError> {
-    crate::macros::run!(self, SessionCommand::CloseFile, filepath)
+    crate::macros::run_command!(self, SessionCommand::CloseFile, filepath)
   }
 
   pub async fn get_plain_goals(&self, location: Location) -> Result<GetPlainGoalsResponse, AnyhowError> {
-    crate::macros::run!(self, SessionCommand::GetPlainGoals, location).ok()
+    crate::macros::run_command!(self, SessionCommand::GetPlainGoals, location).ok()
   }
 
   pub async fn status(&self) -> Result<SessionStatus, AnyhowError> {
-    crate::macros::run!(self, SessionCommand::GetStatus).ok()
+    crate::macros::run_command!(self, SessionCommand::GetStatus).ok()
   }
 
   pub fn notifications(&self) -> BroadcastReceiverStream<Json> {

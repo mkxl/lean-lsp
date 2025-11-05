@@ -33,15 +33,15 @@ impl SessionSet {
   ) -> Result<Session, AnyhowError> {
     let command = NewSessionCommand::new(lean_path, lean_server_log_dirpath);
 
-    crate::macros::run!(self, SessionSetCommand::NewSession, command)
+    crate::macros::run_command!(self, SessionSetCommand::NewSession, command)
   }
 
   pub async fn get_sessions(&self) -> Result<Vec<Session>, AnyhowError> {
-    crate::macros::run!(self, SessionSetCommand::GetSessions).ok()
+    crate::macros::run_command!(self, SessionSetCommand::GetSessions).ok()
   }
 
   pub async fn get_session(&self, session_id: Option<Ulid>) -> Result<Session, AnyhowError> {
-    crate::macros::run!(self, SessionSetCommand::GetSession, session_id)
+    crate::macros::run_command!(self, SessionSetCommand::GetSession, session_id)
   }
 
   pub async fn status(&self) -> Result<SessionSetStatus, AnyhowError> {

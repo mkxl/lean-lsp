@@ -1,4 +1,4 @@
-macro_rules! run {
+macro_rules! run_command {
     ($self:expr, $head:ident $(:: $tail:ident)* $(, $field:ident)*) => {{
         let (sender, receiver) = ::tokio::sync::oneshot::channel();
         let command = $head $(:: $tail)* { sender $(, $field)* };
@@ -9,4 +9,4 @@ macro_rules! run {
     }};
 }
 
-pub(crate) use run;
+pub(crate) use run_command;
