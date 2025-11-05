@@ -52,64 +52,28 @@ impl Session {
     self.id
   }
 
-  // TODO-8dffbb
   pub async fn initialize(&self) -> Result<(), AnyhowError> {
-    let (sender, receiver) = tokio::sync::oneshot::channel();
-    let initialize_command = SessionCommand::Initialize { sender };
-
-    self.commands.send(initialize_command)?;
-
-    receiver.await?.ok()
+    crate::macros::run_command!(self, SessionCommand::Initialize).ok()
   }
 
-  // TODO-8dffbb
   pub async fn open_file(&self, filepath: PathBuf) -> Result<(), AnyhowError> {
-    let (sender, receiver) = tokio::sync::oneshot::channel();
-    let open_file_command = SessionCommand::OpenFile { sender, filepath };
-
-    self.commands.send(open_file_command)?;
-
-    receiver.await?
+    crate::macros::run_command!(self, SessionCommand::OpenFile, filepath)
   }
 
-  // TODO-8dffbb
   pub async fn change_file(&self, filepath: PathBuf, text: String) -> Result<(), AnyhowError> {
-    let (sender, receiver) = tokio::sync::oneshot::channel();
-    let change_file_command = SessionCommand::ChangeFile { sender, filepath, text };
-
-    self.commands.send(change_file_command)?;
-
-    receiver.await?
+    crate::macros::run_command!(self, SessionCommand::ChangeFile, filepath, text)
   }
-
-  // TODO-8dffbb
+  
   pub async fn close_file(&self, filepath: PathBuf) -> Result<(), AnyhowError> {
-    let (sender, receiver) = tokio::sync::oneshot::channel();
-    let close_file_command = SessionCommand::CloseFile { sender, filepath };
-
-    self.commands.send(close_file_command)?;
-
-    receiver.await?
+    crate::macros::run_command!(self, SessionCommand::CloseFile, filepath)
   }
 
-  // TODO-8dffbb
   pub async fn get_plain_goals(&self, location: Location) -> Result<GetPlainGoalsResponse, AnyhowError> {
-    let (sender, receiver) = tokio::sync::oneshot::channel();
-    let get_plain_goals_command = SessionCommand::GetPlainGoals { sender, location };
-
-    self.commands.send(get_plain_goals_command)?;
-
-    receiver.await?.ok()
+    crate::macros::run_command!(self, SessionCommand::GetPlainGoals, location).ok()
   }
 
-  // TODO-8dffbb
   pub async fn status(&self) -> Result<SessionStatus, AnyhowError> {
-    let (sender, receiver) = tokio::sync::oneshot::channel();
-    let get_process_status = SessionCommand::GetStatus { sender };
-
-    self.commands.send(get_process_status)?;
-
-    receiver.await?.ok()
+    crate::macros::run_command!(self, SessionCommand::GetStatus).ok()
   }
 
   pub fn notifications(&self) -> BroadcastReceiverStream<Json> {
