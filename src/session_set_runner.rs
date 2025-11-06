@@ -76,11 +76,10 @@ impl SessionSetRunner {
     tracing::info!(session_id = %session_result.id, "cleaned up session");
   }
 
-  async fn process_session_result(&mut self, session_result_res_opt: Option<Result<SessionResult, JoinError>>) {
-    match session_result_res_opt {
-      Some(Ok(session_result)) => self.cleanup_session(session_result),
-      Some(Err(join_error)) => tracing::warn!(%join_error, "session run task failed to execute to completion"),
-      None => tokio::task::yield_now().await,
+  fn process_session_result(&mut self, session_result_res: Result<SessionResult, JoinError>) {
+    match session_result_res {
+      Ok(session_result) => self.cleanup_session(session_result),
+      Err(join_error) => tracing::warn!(%join_error, "session run task failed to execute to completion"),
     }
   }
 
@@ -89,7 +88,7 @@ impl SessionSetRunner {
     loop {
       tokio::select! {
         session_set_command_res = self.commands.next_item_async() => self.process_command(session_set_command_res?).await.context("error processing command").log_if_error().unit(),
-        session_result_res_opt = self.session_results.join_next() => self.process_session_result(session_result_res_opt).await,
+        session_result_res = self.session_results.join() => self.process_session_result(session_result_res),
       }
     }
   }
