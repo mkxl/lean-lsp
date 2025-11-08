@@ -211,6 +211,7 @@ impl SessionRunner {
     }
   }
 
+  #[tracing::instrument(skip_all, err)]
   fn process_response(&mut self, request: Request, response: &Json) -> Result<(), AnyhowError> {
     tracing::info!(received_response = response.to_value(), %request, "received response for request");
 
@@ -231,20 +232,23 @@ impl SessionRunner {
   }
 
   #[allow(clippy::unused_self)]
+  #[tracing::instrument(skip_all)]
   fn process_request(&self, request: &Json) {
     tracing::info!(received_request = request.to_value(), "received request");
   }
 
-  fn process_notification(&mut self, notification: Json) -> Result<(), AnyhowError> {
+  #[tracing::instrument(skip_all)]
+  fn process_notification(&mut self, notification: Json) {
     tracing::info!(received_notification = notification.to_value(), "received notification");
 
-    self.notifications.send(notification)?.unit().ok()
+    self.notifications.send(notification).log_if_error().unit()
   }
 
+  #[tracing::instrument(skip_all, err)]
   fn process_message(&mut self, message: Json) -> Result<(), AnyhowError> {
     tracing::info!(received_message = message.to_value(), "received message");
 
-    let Some(id) = message.get("id") else { return self.process_notification(message) };
+    let Some(id) = message.get("id") else { return self.process_notification(message).ok() };
     let id = id.to_value_from_value::<Id>()?;
 
     if let Some(request) = self.requests.remove(&id) {
