@@ -195,7 +195,11 @@ impl SessionRunner {
     let process = self.lean_server.process_status();
     let project_dirpath = self.project_dirpath.clone();
 
-    SessionStatus { id, process, project_dirpath }
+    SessionStatus {
+      id,
+      process,
+      project_dirpath,
+    }
   }
 
   #[tracing::instrument(skip_all)]
