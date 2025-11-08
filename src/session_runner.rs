@@ -78,8 +78,8 @@ impl SessionRunner {
   }
 
   fn project_dirpath(lean_path: &Path) -> Result<PathBuf, AnyhowError> {
-    for ancestor_path in lean_path.ancestors() {
-      let mut manifest_filepath = ancestor_path.with_file_name(Self::MANIFEST_FILE_NAME);
+    for ancestor_path in lean_path.absolute()?.ancestors() {
+      let mut manifest_filepath = ancestor_path.join(Self::MANIFEST_FILE_NAME);
 
       if manifest_filepath.is_file() {
         manifest_filepath.pop();
@@ -193,8 +193,9 @@ impl SessionRunner {
   fn get_status(&self) -> SessionStatus {
     let id = self.id;
     let process = self.lean_server.process_status();
+    let project_dirpath = self.project_dirpath.clone();
 
-    SessionStatus { id, process }
+    SessionStatus { id, process, project_dirpath }
   }
 
   #[tracing::instrument(skip_all)]

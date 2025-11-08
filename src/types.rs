@@ -32,6 +32,7 @@ pub struct PlainGoals {
 pub struct SessionStatus {
   pub id: Ulid,
   pub process: TaskStatus,
+  pub project_dirpath: PathBuf,
 }
 
 #[derive(Constructor, Deserialize, Object, Serialize)]
