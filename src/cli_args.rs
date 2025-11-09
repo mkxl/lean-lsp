@@ -9,7 +9,7 @@ use ulid::Ulid;
 
 use crate::{
   client::Client,
-  commands::{ChangeFileCommand, CloseFileCommand, NewSessionCommand, OpenFileCommand},
+  commands::{ChangeFileCommand, CloseFileCommand, HoverFileCommand, NewSessionCommand, OpenFileCommand},
   server::Server,
   types::Location,
 };
@@ -68,6 +68,7 @@ impl File {
       FileCommand::Open(open_command) => client.open_file(&open_command).await?.ok(),
       FileCommand::Change(change_command) => client.change_file(change_command).await?.ok(),
       FileCommand::Close(close_command) => client.close_file(&close_command).await?.ok(),
+      FileCommand::Hover(hover_command) => client.hover_file(&hover_command).await?.to_json_str()?.println().ok(),
     }
   }
 }
@@ -75,6 +76,7 @@ impl File {
 #[derive(Subcommand)]
 enum FileCommand {
   Open(OpenFileCommand),
+  Hover(HoverFileCommand),
   Change(ChangeFileCommand),
   Close(CloseFileCommand),
 }

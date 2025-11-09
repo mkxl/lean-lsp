@@ -9,7 +9,7 @@ use ulid::Ulid;
 
 use crate::{
   commands::SessionCommand,
-  server::responses::GetPlainGoalsResponse,
+  server::responses::{GetPlainGoalsResponse, HoverFileResponse},
   session_runner::SessionRunner,
   types::{Location, SessionStatus},
 };
@@ -66,6 +66,10 @@ impl Session {
 
   pub async fn close_file(&self, filepath: PathBuf) -> Result<(), AnyhowError> {
     crate::macros::run_command!(self, SessionCommand::CloseFile, filepath)
+  }
+
+  pub async fn hover_file(&self, location: Location) -> Result<HoverFileResponse, AnyhowError> {
+    crate::macros::run_command!(self, SessionCommand::HoverFile, location).ok()
   }
 
   pub async fn get_plain_goals(&self, location: Location) -> Result<GetPlainGoalsResponse, AnyhowError> {
