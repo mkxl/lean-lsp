@@ -157,6 +157,19 @@ impl Status {
   }
 }
 
+#[derive(Args)]
+struct Kill {
+  #[arg(long, default_value_t = Server::DEFAULT_PORT)]
+  port: u16,
+  session_id: Option<Ulid>,
+}
+
+impl Kill {
+  async fn run(self) -> Result<(), AnyhowError> {
+    Client::new(self.port)?.kill(self.session_id).await?.ok()
+  }
+}
+
 #[derive(Subcommand)]
 enum Command {
   Get(Get),
@@ -166,6 +179,7 @@ enum Command {
   Serve(Serve),
   InfoView(InfoView),
   Status(Status),
+  Kill(Kill),
 }
 
 #[derive(Parser)]
@@ -214,6 +228,7 @@ impl CliArgs {
       Command::Serve(serve) => serve.run().await,
       Command::InfoView(info_view) => info_view.run().await,
       Command::Status(status) => status.run().await,
+      Command::Kill(kill) => kill.run().await,
     }
   }
 }

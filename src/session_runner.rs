@@ -213,6 +213,7 @@ impl SessionRunner {
       SessionCommand::CloseFile { sender, filepath } => self.close_file(&filepath).send_to_oneshot(sender),
       SessionCommand::GetPlainGoals { sender, location } => self.get_plain_goals(sender, &location),
       SessionCommand::GetStatus { sender } => self.get_status().send_to_oneshot(sender),
+      SessionCommand::Kill { sender } => self.lean_server.kill().send_to_oneshot(sender),
     }
   }
 

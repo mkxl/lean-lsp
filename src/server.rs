@@ -49,6 +49,7 @@ impl Server {
   pub const PATH_GET_PLAIN_GOALS: &'static str = "/session/info-view/plain-goals";
   pub const PATH_GET_SESSIONS: &'static str = "/session";
   pub const PATH_GET_STATUS: &'static str = "/status";
+  pub const PATH_KILL_SESSION: &'static str = "/session";
   pub const PATH_NEW_SESSION: &'static str = "/session/new";
   pub const QUERY_PARAM_CHARACTER: &'static str = "character";
   pub const QUERY_PARAM_FILEPATH: &'static str = "filepath";
@@ -284,6 +285,18 @@ impl Server {
       web_socket.on_upgrade(|web_socket_stream| Self::on_web_socket_upgrade(session_set, web_socket_stream));
 
     web_socket_upgraded.boxed()
+  }
+
+  #[oai(path = "/session", method = "delete")]
+  async fn kill_session(&self, Query(session_id): Query<Option<Ulid>>) -> Result<PoemJson<()>, PoemError> {
+    self
+      .session_set
+      .get_session(session_id)
+      .await?
+      .kill()
+      .await?
+      .poem_json()
+      .ok()
   }
 
   pub async fn serve(port: u16) -> Result<(), AnyhowError> {
