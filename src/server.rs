@@ -274,6 +274,12 @@ impl Server {
           .await?
           .with("complete")
           .to_json_object("close_file"),
+        "hover_file" => session_set
+          .get_session(session_id)
+          .await?
+          .hover_file(message_json.take_json("location")?)
+          .await?
+          .to_json_object("hover_file"),
         "get_plain_goals" => session_set
           .get_session(session_id)
           .await?

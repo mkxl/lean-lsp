@@ -241,6 +241,8 @@ impl SessionRunner {
       Request::Hover(sender) => response
         .to_value_from_value::<HoverFileResponse>()?
         .send_to_oneshot(sender)?,
+
+      // explicitly name ignored requests so new variants cause a compile error.
       Request::TextDocumentDocumentSymbol
       | Request::TextDocumentDocumentCodeAction
       | Request::TextDocumentFoldingRange
