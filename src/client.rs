@@ -7,11 +7,11 @@ use serde_json::Value as Json;
 use ulid::Ulid;
 
 use crate::{
-  commands::{ChangeFileCommand, CloseFileCommand, NewSessionCommand, OpenFileCommand},
+  commands::{ChangeFileCommand, CloseFileCommand, HoverFileCommand, NewSessionCommand, OpenFileCommand},
   server::{
     Server,
     requests::ChangeFileRequest,
-    responses::{GetPlainGoalsResponse, GetSessionsResponse, NewSessionResponse},
+    responses::{GetPlainGoalsResponse, GetSessionsResponse, HoverFileResponse, NewSessionResponse},
   },
   types::{Location, SessionSetStatus},
 };
@@ -98,6 +98,22 @@ impl Client {
       .check_status()
       .await?
       .json::<()>()
+      .await?
+      .ok()
+  }
+
+  pub async fn hover_file(&self, command: &HoverFileCommand) -> Result<HoverFileResponse, AnyhowError> {
+    let url = self.url(Server::PATH_FILE_HOVER);
+
+    self
+      .http_client
+      .post(url)
+      .json(command)
+      .send()
+      .await?
+      .check_status()
+      .await?
+      .json::<HoverFileResponse>()
       .await?
       .ok()
   }

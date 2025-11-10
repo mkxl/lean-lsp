@@ -1,6 +1,7 @@
 use derive_more::From;
 use poem_openapi::Object;
 use serde::{Deserialize, Serialize};
+use serde_json::Value as Json;
 use ulid::Ulid;
 
 use crate::types::{PlainGoals, SessionStatus};
@@ -18,4 +19,9 @@ pub struct GetSessionsResponse {
 #[derive(Deserialize, Object, Serialize)]
 pub struct GetPlainGoalsResponse {
   pub result: Option<PlainGoals>,
+}
+
+#[derive(Deserialize, Object, Serialize)]
+pub struct HoverFileResponse {
+  pub result: Json,
 }

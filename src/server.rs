@@ -22,10 +22,10 @@ use tokio::task::JoinHandle;
 use ulid::Ulid;
 
 use crate::{
-  commands::{CloseFileCommand, NewSessionCommand, OpenFileCommand},
+  commands::{CloseFileCommand, HoverFileCommand, NewSessionCommand, OpenFileCommand},
   server::{
     requests::ChangeFileRequest,
-    responses::{GetPlainGoalsResponse, GetSessionsResponse, NewSessionResponse},
+    responses::{GetPlainGoalsResponse, GetSessionsResponse, HoverFileResponse, NewSessionResponse},
   },
   session::Session,
   session_set::SessionSet,
@@ -44,6 +44,7 @@ impl Server {
   pub const IPV4_ADDR: Ipv4Addr = Ipv4Addr::UNSPECIFIED;
   pub const PATH_FILE_CHANGE: &'static str = "/session/file/change";
   pub const PATH_FILE_CLOSE: &'static str = "/session/file/close";
+  pub const PATH_FILE_HOVER: &'static str = "/session/file/hover";
   pub const PATH_FILE_OPEN: &'static str = "/session/file/open";
   pub const PATH_GET_NOTIFICATIONS: &'static str = "/session/notifications";
   pub const PATH_GET_PLAIN_GOALS: &'static str = "/session/info-view/plain-goals";
@@ -158,6 +159,21 @@ impl Server {
       .ok()
   }
 
+  #[oai(path = "/session/file/hover", method = "post")]
+  async fn hover_file(
+    &self,
+    PoemJson(command): PoemJson<HoverFileCommand>,
+  ) -> Result<PoemJson<HoverFileResponse>, PoemError> {
+    self
+      .session_set
+      .get_session(command.session_id)
+      .await?
+      .hover_file(command.location)
+      .await?
+      .poem_json()
+      .ok()
+  }
+
   #[oai(path = "/session/notifications", method = "get")]
   async fn notifications(
     &self,
@@ -258,6 +274,12 @@ impl Server {
           .await?
           .with("complete")
           .to_json_object("close_file"),
+        "hover_file" => session_set
+          .get_session(session_id)
+          .await?
+          .hover_file(message_json.take_json("location")?)
+          .await?
+          .to_json_object("hover_file"),
         "get_plain_goals" => session_set
           .get_session(session_id)
           .await?

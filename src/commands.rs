@@ -10,7 +10,7 @@ use ulid::Ulid;
 
 use crate::{
   lean_server::LeanServer,
-  server::responses::GetPlainGoalsResponse,
+  server::responses::{GetPlainGoalsResponse, HoverFileResponse},
   session::Session,
   types::{Location, SessionStatus},
 };
@@ -31,6 +31,10 @@ pub enum SessionCommand {
   CloseFile {
     sender: OneshotSender<Result<(), AnyhowError>>,
     filepath: PathBuf,
+  },
+  HoverFile {
+    sender: OneshotSender<HoverFileResponse>,
+    location: Location,
   },
   GetPlainGoals {
     sender: OneshotSender<GetPlainGoalsResponse>,
@@ -76,6 +80,14 @@ pub struct CloseFileCommand {
   #[arg(long)]
   pub session_id: Option<Ulid>,
   pub lean_filepath: PathBuf,
+}
+
+#[derive(Args, Constructor, Deserialize, Object, Serialize)]
+pub struct HoverFileCommand {
+  #[arg(long)]
+  pub session_id: Option<Ulid>,
+  #[command(flatten)]
+  pub location: Location,
 }
 
 pub enum SessionSetCommand {
