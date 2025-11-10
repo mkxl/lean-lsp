@@ -67,7 +67,6 @@ impl Server {
   }
 
   #[oai(path = "/session-set/status", method = "get")]
-  #[allow(clippy::unused_async)]
   async fn get_session_set_status(&self) -> Result<PoemJson<SessionSetStatus>, PoemError> {
     let session_set_status = self.join_handle.is_finished().into();
     let session_statuses = self
@@ -212,7 +211,7 @@ impl Server {
   async fn stream(&self, web_socket: WebSocket) -> BoxWebSocketUpgraded {
     let session_set = self.session_set.clone();
     let web_socket_upgraded =
-      web_socket.on_upgrade(|web_socket_stream| Stream::on_web_socket_upgrade(session_set, web_socket_stream));
+      web_socket.on_upgrade(|web_socket_stream| async { Stream::new(session_set, web_socket_stream).run().await });
 
     web_socket_upgraded.boxed()
   }
