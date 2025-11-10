@@ -83,4 +83,8 @@ impl Session {
   pub fn notifications(&self) -> BroadcastReceiverStream<Json> {
     self.notifications.subscribe().into_stream()
   }
+
+  pub async fn kill(&self) -> Result<(), AnyhowError> {
+    crate::macros::run_command!(self, SessionCommand::Kill)
+  }
 }

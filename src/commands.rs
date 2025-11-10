@@ -43,6 +43,9 @@ pub enum SessionCommand {
   GetStatus {
     sender: OneshotSender<SessionStatus>,
   },
+  Kill {
+    sender: OneshotSender<Result<(), AnyhowError>>,
+  },
 }
 
 #[derive(Args, Constructor, Deserialize, Object, Serialize)]

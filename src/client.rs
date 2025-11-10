@@ -195,4 +195,20 @@ impl Client {
       .await?
       .ok()
   }
+
+  pub async fn kill(&self, session_id: Option<Ulid>) -> Result<(), AnyhowError> {
+    let url = self.url(Server::PATH_KILL_SESSION);
+
+    self
+      .http_client
+      .delete(url)
+      .query_one::<Ulid>(Server::QUERY_PARAM_SESSION_ID, session_id)
+      .send()
+      .await?
+      .check_status()
+      .await?
+      .json::<()>()
+      .await?
+      .ok()
+  }
 }
