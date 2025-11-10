@@ -468,6 +468,7 @@ pub fn initialize_params(root_path: &Path, root_uri: &str, name: &str, process_i
           "version": "1.1.0"
         },
         "positionEncodings": [
+          "utf-8",
           "utf-16"
         ]
       },

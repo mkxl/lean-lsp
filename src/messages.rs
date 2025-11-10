@@ -77,6 +77,13 @@ impl Message {
     Self::notification("textDocument/didClose", &params)
   }
 
+  #[allow(clippy::unused_self)]
+  pub fn text_document_hover_request(uri: &str, line: usize, character: usize) -> Self {
+    let params = crate::messages::text_document::hover_params(uri, line, character);
+
+    Self::request("textDocument/hover", &params)
+  }
+
   pub fn text_document_document_symbol_request(uri: &str) -> Self {
     let params = crate::messages::text_document::document_symbol_params(uri);
 

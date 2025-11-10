@@ -36,6 +36,18 @@ pub fn did_close_notification_params(uri: &str) -> Json {
   })
 }
 
+pub fn hover_params(uri: &str, line: usize, character: usize) -> Json {
+  serde_json::json!({
+    "textDocument": {
+      "uri": uri,
+    },
+    "position": {
+      "line": line,
+      "character": character,
+    },
+  })
+}
+
 pub fn document_symbol_params(uri: &str) -> Json {
   serde_json::json!({"textDocument": {"uri": uri}})
 }

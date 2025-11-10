@@ -7,11 +7,11 @@ use serde_json::Value as Json;
 use ulid::Ulid;
 
 use crate::{
-  commands::{ChangeFileCommand, CloseFileCommand, NewSessionCommand, OpenFileCommand},
+  commands::{ChangeFileCommand, CloseFileCommand, HoverFileCommand, NewSessionCommand, OpenFileCommand},
   server::{
     Server,
     requests::ChangeFileRequest,
-    responses::{GetPlainGoalsResponse, GetSessionsResponse, NewSessionResponse},
+    responses::{GetPlainGoalsResponse, GetSessionsResponse, HoverFileResponse, NewSessionResponse},
   },
   types::{Location, SessionSetStatus},
 };
@@ -102,6 +102,22 @@ impl Client {
       .ok()
   }
 
+  pub async fn hover_file(&self, command: &HoverFileCommand) -> Result<HoverFileResponse, AnyhowError> {
+    let url = self.url(Server::PATH_FILE_HOVER);
+
+    self
+      .http_client
+      .post(url)
+      .json(command)
+      .send()
+      .await?
+      .check_status()
+      .await?
+      .json::<HoverFileResponse>()
+      .await?
+      .ok()
+  }
+
   pub async fn get(&self, session_id: Option<Ulid>) -> Result<GetSessionsResponse, AnyhowError> {
     let url = self.url(Server::PATH_GET_SESSIONS);
 
@@ -176,6 +192,22 @@ impl Client {
       .check_status()
       .await?
       .json::<SessionSetStatus>()
+      .await?
+      .ok()
+  }
+
+  pub async fn kill(&self, session_id: Option<Ulid>) -> Result<(), AnyhowError> {
+    let url = self.url(Server::PATH_KILL_SESSION);
+
+    self
+      .http_client
+      .delete(url)
+      .query_one::<Ulid>(Server::QUERY_PARAM_SESSION_ID, session_id)
+      .send()
+      .await?
+      .check_status()
+      .await?
+      .json::<()>()
       .await?
       .ok()
   }

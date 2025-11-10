@@ -18,7 +18,7 @@ use crate::{
   commands::SessionCommand,
   lean_server::LeanServer,
   messages::{Id, Message, text_document::INITIAL_TEXT_DOCUMENT_VERSION},
-  server::responses::GetPlainGoalsResponse,
+  server::responses::{GetPlainGoalsResponse, HoverFileResponse},
   types::{Location, SessionStatus},
 };
 
@@ -26,6 +26,7 @@ use crate::{
 enum Request {
   Initialize(OneshotSender<()>),
   GetPlainGoals(OneshotSender<GetPlainGoalsResponse>),
+  Hover(OneshotSender<HoverFileResponse>),
   TextDocumentDocumentSymbol,
   TextDocumentDocumentCodeAction,
   TextDocumentFoldingRange,
@@ -178,6 +179,17 @@ impl SessionRunner {
   }
 
   #[tracing::instrument(skip_all)]
+  fn hover_file(&mut self, sender: OneshotSender<HoverFileResponse>, location: &Location) -> Result<(), AnyhowError> {
+    let uri = location.filepath.to_uri()?;
+    let message = Message::text_document_hover_request(&uri, location.line, location.character);
+    let request = Request::Hover(sender);
+
+    self.send_request(message, request)?;
+
+    ().ok()
+  }
+
+  #[tracing::instrument(skip_all)]
   fn get_plain_goals(
     &mut self,
     sender: OneshotSender<GetPlainGoalsResponse>,
@@ -210,9 +222,11 @@ impl SessionRunner {
       SessionCommand::ChangeFile { sender, filepath, text } => {
         self.change_file(&filepath, &text).send_to_oneshot(sender)
       }
+      SessionCommand::HoverFile { sender, location } => self.hover_file(sender, &location),
       SessionCommand::CloseFile { sender, filepath } => self.close_file(&filepath).send_to_oneshot(sender),
       SessionCommand::GetPlainGoals { sender, location } => self.get_plain_goals(sender, &location),
       SessionCommand::GetStatus { sender } => self.get_status().send_to_oneshot(sender),
+      SessionCommand::Kill { sender } => self.lean_server.kill().send_to_oneshot(sender),
     }
   }
 
@@ -230,7 +244,15 @@ impl SessionRunner {
       Request::GetPlainGoals(sender) => response
         .to_value_from_value::<GetPlainGoalsResponse>()?
         .send_to_oneshot(sender)?,
-      _ => (),
+      Request::Hover(sender) => response
+        .to_value_from_value::<HoverFileResponse>()?
+        .send_to_oneshot(sender)?,
+
+      // explicitly name ignored requests so new variants cause a compile error.
+      Request::TextDocumentDocumentSymbol
+      | Request::TextDocumentDocumentCodeAction
+      | Request::TextDocumentFoldingRange
+      | Request::LeanRpcConnect => (),
     }
 
     ().ok()
