@@ -13,7 +13,7 @@ pub struct Stream {
 }
 
 impl Stream {
-  pub async fn run(&mut self) -> Result<(), AnyhowError> {
+  pub async fn run(mut self) -> Result<(), AnyhowError> {
     loop {
       let PoemMessage::Text(message) = self.web_socket_stream.next_item_async().await?? else { continue };
       let mut message_json = message.to_json()?;

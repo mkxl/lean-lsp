@@ -228,7 +228,7 @@ impl Server {
   async fn stream(&self, web_socket: WebSocket) -> BoxWebSocketUpgraded {
     let session_set = self.session_set.clone();
     let web_socket_upgraded =
-      web_socket.on_upgrade(|web_socket_stream| async { Stream::new(session_set, web_socket_stream).run().await });
+      web_socket.on_upgrade(|web_socket_stream| Stream::new(session_set, web_socket_stream).run());
 
     web_socket_upgraded.boxed()
   }
