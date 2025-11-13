@@ -49,7 +49,7 @@ impl Server {
   pub const PATH_GET_NOTIFICATIONS: &'static str = "/session/notifications";
   pub const PATH_GET_PLAIN_GOALS: &'static str = "/session/info-view/plain-goals";
   pub const PATH_GET_SESSIONS: &'static str = "/session";
-  pub const PATH_GET_STATUS: &'static str = "/status";
+  pub const PATH_GET_SESSION_SET_STATUS: &'static str = "/session-set/status";
   pub const PATH_KILL: &'static str = "/session";
   pub const PATH_NEW_SESSION: &'static str = "/session/new";
   pub const QUERY_PARAM_CHARACTER: &'static str = "character";

@@ -182,7 +182,7 @@ impl Client {
   }
 
   pub async fn status(&self) -> Result<SessionSetStatus, AnyhowError> {
-    let url = self.url(Server::PATH_GET_STATUS);
+    let url = self.url(Server::PATH_GET_SESSION_SET_STATUS);
 
     self
       .http_client
