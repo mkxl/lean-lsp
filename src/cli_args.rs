@@ -34,6 +34,22 @@ impl Get {
 }
 
 #[derive(Args)]
+struct List {
+  #[arg(long, default_value_t = Server::DEFAULT_PORT)]
+  port: u16,
+}
+
+impl List {
+  async fn run(self) -> Result<(), AnyhowError> {
+    for session_status in Client::new(self.port)?.get(None).await?.sessions {
+      session_status.id.println();
+    }
+
+    ().ok()
+  }
+}
+
+#[derive(Args)]
 struct New {
   #[arg(long, default_value_t = Server::DEFAULT_PORT)]
   port: u16,
@@ -175,6 +191,7 @@ impl Kill {
 #[derive(Subcommand)]
 enum Command {
   Get(Get),
+  List(List),
   New(New),
   File(File),
   Notifications(Notifications),
@@ -224,6 +241,7 @@ impl CliArgs {
 
     match self.command {
       Command::Get(get) => get.run().await,
+      Command::List(list) => list.run().await,
       Command::New(new) => new.run().await,
       Command::File(open) => open.run().await,
       Command::Notifications(notifications) => notifications.run().await,

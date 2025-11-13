@@ -4,9 +4,8 @@ pub mod responses;
 use std::{collections::HashSet, net::Ipv4Addr, path::PathBuf};
 
 use anyhow::Error as AnyhowError;
-use derive_more::From;
-use futures::StreamExt;
-use mkutils::Utils;
+use futures::{FutureExt, StreamExt};
+use mkutils::{Event, EventReceiver, EventSender, Utils};
 use poem::{
   Body as PoemBody, EndpointExt, Error as PoemError, Route, Server as PoemServer,
   listener::TcpListener,
@@ -33,10 +32,10 @@ use crate::{
   types::{Location, SessionSetStatus},
 };
 
-#[derive(From)]
 pub struct Server {
   session_set: SessionSet,
   join_handle: JoinHandle<Result<(), AnyhowError>>,
+  kill_event_sender: EventSender,
 }
 
 #[OpenApi]
@@ -51,7 +50,7 @@ impl Server {
   pub const PATH_GET_PLAIN_GOALS: &'static str = "/session/info-view/plain-goals";
   pub const PATH_GET_SESSIONS: &'static str = "/session";
   pub const PATH_GET_STATUS: &'static str = "/status";
-  pub const PATH_KILL_SESSION: &'static str = "/session";
+  pub const PATH_KILL: &'static str = "/session";
   pub const PATH_NEW_SESSION: &'static str = "/session/new";
   pub const QUERY_PARAM_CHARACTER: &'static str = "character";
   pub const QUERY_PARAM_FILEPATH: &'static str = "filepath";
@@ -64,8 +63,16 @@ impl Server {
   const TITLE: &'static str = std::env!("CARGO_PKG_NAME");
   const VERSION: &'static str = std::env!("CARGO_PKG_VERSION");
 
-  fn new() -> Self {
-    SessionSet::new().into()
+  fn new() -> (Self, EventReceiver) {
+    let (session_set, join_handle) = SessionSet::new();
+    let (kill_event_sender, kill_event_receiver) = Event::new();
+    let server = Self {
+      session_set,
+      join_handle,
+      kill_event_sender,
+    };
+
+    (server, kill_event_receiver)
   }
 
   #[oai(path = "/session-set/status", method = "get")]
@@ -233,29 +240,30 @@ impl Server {
     web_socket_upgraded.boxed()
   }
 
-  #[oai(path = "/session", method = "delete")]
-  async fn kill_session(&self, Query(session_id): Query<Option<Ulid>>) -> Result<PoemJson<()>, PoemError> {
-    self
-      .session_set
-      .get_session(session_id)
-      .await?
-      .kill()
-      .await?
-      .poem_json()
-      .ok()
+  #[oai(path = "/", method = "delete")]
+  async fn kill(&self, Query(session_id): Query<Option<Ulid>>) -> Result<PoemJson<()>, PoemError> {
+    if session_id.is_some() {
+      self.session_set.get_session(session_id).await?.kill().await?;
+    } else {
+      self.session_set.kill().await?;
+      self.kill_event_sender.set();
+    }
+
+    ().poem_json().ok()
   }
 
   pub async fn serve(port: u16) -> Result<(), AnyhowError> {
     let listener = TcpListener::bind((Self::IPV4_ADDR, port));
-    let open_api_service = OpenApiService::new(Self::new(), Self::TITLE, Self::VERSION);
+    let (server, mut kill_event_receiver) = Self::new();
+    let open_api_service = OpenApiService::new(server, Self::TITLE, Self::VERSION);
     let open_api_endpoint = open_api_service.spec_yaml().into_endpoint();
     let endpoint = Route::new()
       .nest(Self::PATH_ROOT, open_api_service)
       .nest(Self::PATH_OPEN_API, open_api_endpoint)
       .with(Tracing);
+    let run_future = PoemServer::new(listener).run(endpoint);
+    let kill_future = kill_event_receiver.wait().map(Ok);
 
-    PoemServer::new(listener).run(endpoint).await?;
-
-    ().ok()
+    run_future.into_select(kill_future).await?.ok()
   }
 }

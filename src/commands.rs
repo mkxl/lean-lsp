@@ -44,7 +44,7 @@ pub enum SessionCommand {
     sender: OneshotSender<SessionStatus>,
   },
   Kill {
-    sender: OneshotSender<Result<(), AnyhowError>>,
+    sender: OneshotSender<()>,
   },
 }
 
@@ -104,5 +104,8 @@ pub enum SessionSetCommand {
   GetSession {
     sender: OneshotSender<Result<Session, AnyhowError>>,
     session_id: Option<Ulid>,
+  },
+  Kill {
+    sender: OneshotSender<Result<(), AnyhowError>>,
   },
 }

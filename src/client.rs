@@ -197,7 +197,7 @@ impl Client {
   }
 
   pub async fn kill(&self, session_id: Option<Ulid>) -> Result<(), AnyhowError> {
-    let url = self.url(Server::PATH_KILL_SESSION);
+    let url = self.url(Server::PATH_KILL);
 
     self
       .http_client

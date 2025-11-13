@@ -1,7 +1,7 @@
 use std::{collections::HashMap, path::Path};
 
 use anyhow::{Context, Error as AnyhowError};
-use mkutils::{IntoStream, Utils};
+use mkutils::{Event, EventReceiver, EventSender, IntoStream, Utils};
 use tokio::{
   sync::mpsc::UnboundedReceiver as MpscUnboundedReceiver,
   task::{JoinError, JoinSet},
@@ -15,6 +15,8 @@ pub struct SessionSetRunner {
   commands: MpscUnboundedReceiverStream<SessionSetCommand>,
   sessions: HashMap<Ulid, Session>,
   session_results: JoinSet<SessionResult>,
+  kill_event_sender: EventSender,
+  kill_event_receiver: EventReceiver,
 }
 
 impl SessionSetRunner {
@@ -22,11 +24,14 @@ impl SessionSetRunner {
     let commands = commands.into_stream();
     let sessions = HashMap::new();
     let session_results = JoinSet::new();
+    let (kill_event_sender, kill_event_receiver) = Event::new();
 
     Self {
       commands,
       sessions,
       session_results,
+      kill_event_sender,
+      kill_event_receiver,
     }
   }
 
@@ -53,6 +58,13 @@ impl SessionSetRunner {
     }
   }
 
+  async fn kill(&mut self) -> Result<(), AnyhowError> {
+    self.sessions.values().map(Session::kill).try_join_all().await?;
+    self.kill_event_sender.set();
+
+    ().ok()
+  }
+
   #[tracing::instrument(skip_all)]
   async fn process_command(&mut self, command: SessionSetCommand) -> Result<(), AnyhowError> {
     match command {
@@ -63,6 +75,7 @@ impl SessionSetRunner {
       SessionSetCommand::GetSession { sender, session_id } => {
         self.get_session(session_id).send_to_oneshot(sender)?;
       }
+      SessionSetCommand::Kill { sender } => self.kill().await.send_to_oneshot(sender)?,
     }
 
     ().ok()
@@ -89,6 +102,7 @@ impl SessionSetRunner {
       tokio::select! {
         session_set_command_res = self.commands.next_item_async() => self.process_command(session_set_command_res?).await.context("error processing command").log_if_error().unit(),
         session_result_res = self.session_results.join() => self.process_session_result(session_result_res),
+        () = self.kill_event_receiver.wait() => return ().ok(),
       }
     }
   }

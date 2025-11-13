@@ -4,7 +4,7 @@ use std::{
 };
 
 use anyhow::Error as AnyhowError;
-use mkutils::{IntoStream, ToValue, Utils};
+use mkutils::{Event, EventReceiver, EventSender, IntoStream, ToValue, Utils};
 use serde_json::Value as Json;
 use strum::Display;
 use tokio::sync::{
@@ -46,6 +46,8 @@ pub struct SessionRunner {
   requests: HashMap<Id, Request>,
   notifications: BroadcastSender<Json>,
   open_file_versions: HashMap<PathBuf, usize>,
+  kill_event_sender: EventSender,
+  kill_event_receiver: EventReceiver,
 }
 
 impl SessionRunner {
@@ -63,6 +65,7 @@ impl SessionRunner {
     let lean_server = LeanServer::new(&project_dirpath, lean_server_log_dirpath)?;
     let requests = HashMap::default();
     let open_file_versions = HashMap::new();
+    let (kill_event_sender, kill_event_receiver) = Event::new();
     let session_runner = Self {
       id,
       lean_server,
@@ -71,6 +74,8 @@ impl SessionRunner {
       requests,
       notifications,
       open_file_versions,
+      kill_event_sender,
+      kill_event_receiver,
     };
 
     tracing::info!(%id, project_dirpath = %session_runner.project_dirpath.display(), "new session");
@@ -214,6 +219,11 @@ impl SessionRunner {
     }
   }
 
+  fn kill(&mut self) {
+    self.lean_server.kill();
+    self.kill_event_sender.set();
+  }
+
   #[tracing::instrument(skip_all)]
   async fn process_command(&mut self, session_command: SessionCommand) -> Result<(), AnyhowError> {
     match session_command {
@@ -226,7 +236,7 @@ impl SessionRunner {
       SessionCommand::CloseFile { sender, filepath } => self.close_file(&filepath).send_to_oneshot(sender),
       SessionCommand::GetPlainGoals { sender, location } => self.get_plain_goals(sender, &location),
       SessionCommand::GetStatus { sender } => self.get_status().send_to_oneshot(sender),
-      SessionCommand::Kill { sender } => self.lean_server.kill().send_to_oneshot(sender),
+      SessionCommand::Kill { sender } => self.kill().send_to_oneshot(sender),
     }
   }
 
@@ -291,6 +301,7 @@ impl SessionRunner {
       tokio::select! {
         session_command_res = self.commands.next_item_async() => self.process_command(session_command_res?).await?,
         json_message_res = self.lean_server.recv::<Json>() => self.process_message(json_message_res?)?,
+        () = self.kill_event_receiver.wait() => return ().ok(),
       }
     }
   }
