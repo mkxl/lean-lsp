@@ -11,7 +11,7 @@ use crate::{
   client::Client,
   commands::{ChangeFileCommand, CloseFileCommand, HoverFileCommand, NewSessionCommand, OpenFileCommand},
   server::Server,
-  types::Location,
+  types::Utf8Location,
 };
 
 #[derive(Args)]
@@ -135,7 +135,7 @@ impl Serve {
 
 #[derive(Subcommand)]
 enum InfoViewCommand {
-  GetPlainGoals(Location),
+  GetPlainGoals(Utf8Location),
 }
 
 #[derive(Args)]

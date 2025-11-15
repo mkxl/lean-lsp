@@ -29,7 +29,7 @@ use crate::{
   session::Session,
   session_set::SessionSet,
   stream::Stream,
-  types::{Location, SessionSetStatus},
+  types::{Utf8Location, SessionSetStatus},
 };
 
 pub struct Server {
@@ -218,7 +218,7 @@ impl Server {
     Query(line): Query<usize>,
     Query(character): Query<usize>,
   ) -> Result<PoemJson<GetPlainGoalsResponse>, PoemError> {
-    let location = Location::new(filepath, line, character);
+    let location = Utf8Location::new(filepath, line, character);
     let response = self
       .session_set
       .get_session(session_id)

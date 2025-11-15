@@ -19,7 +19,7 @@ use crate::{
   lean_server::LeanServer,
   messages::{Id, Message, text_document::INITIAL_TEXT_DOCUMENT_VERSION},
   server::responses::{GetPlainGoalsResponse, HoverFileResponse},
-  types::{Location, SessionStatus},
+  types::{SessionStatus, Utf8Location},
 };
 
 #[derive(Display)]
@@ -205,7 +205,11 @@ impl SessionRunner {
   }
 
   #[tracing::instrument(skip_all)]
-  fn hover_file(&mut self, sender: OneshotSender<HoverFileResponse>, location: &Location) -> Result<(), AnyhowError> {
+  fn hover_file(
+    &mut self,
+    sender: OneshotSender<HoverFileResponse>,
+    location: &Utf8Location,
+  ) -> Result<(), AnyhowError> {
     let uri = location.filepath.to_uri()?;
     let message = Message::text_document_hover_request(&uri, location.line, location.character);
     let request = Request::Hover(sender);
@@ -219,7 +223,7 @@ impl SessionRunner {
   fn get_plain_goals(
     &mut self,
     sender: OneshotSender<GetPlainGoalsResponse>,
-    location: &Location,
+    location: &Utf8Location,
   ) -> Result<(), AnyhowError> {
     let uri = location.filepath.to_uri()?;
     let request_message = Message::lean_rpc_get_plain_goals_request(&uri, location.line, location.character);

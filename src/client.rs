@@ -13,7 +13,7 @@ use crate::{
     requests::ChangeFileRequest,
     responses::{GetPlainGoalsResponse, GetSessionsResponse, HoverFileResponse, NewSessionResponse},
   },
-  types::{Location, SessionSetStatus},
+  types::{SessionSetStatus, Utf8Location},
 };
 
 pub struct Client {
@@ -161,7 +161,7 @@ impl Client {
   pub async fn get_plain_goals(
     &self,
     session_id: Option<Ulid>,
-    location: Location,
+    location: Utf8Location,
   ) -> Result<GetPlainGoalsResponse, AnyhowError> {
     let url = self.url(Server::PATH_GET_PLAIN_GOALS);
 

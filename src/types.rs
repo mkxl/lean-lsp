@@ -12,7 +12,7 @@ pub struct TaskStatus {
 }
 
 #[derive(Args, Constructor, Deserialize, Object, Serialize)]
-pub struct Location {
+pub struct Utf8Location {
   pub filepath: PathBuf,
 
   #[arg(long)]
@@ -20,6 +20,13 @@ pub struct Location {
 
   #[arg(long)]
   pub character: usize,
+}
+
+#[derive(Deserialize, Serialize)]
+pub struct Utf16Location {
+  filepath: PathBuf,
+  line: usize,
+  character: usize,
 }
 
 #[derive(Deserialize, Object, Serialize)]
