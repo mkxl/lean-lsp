@@ -29,7 +29,7 @@ use crate::{
   session::Session,
   session_set::SessionSet,
   stream::Stream,
-  types::{Utf8Location, SessionSetStatus},
+  types::{SessionSetStatus, Utf8Location},
 };
 
 pub struct Server {

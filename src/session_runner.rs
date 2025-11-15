@@ -208,8 +208,10 @@ impl SessionRunner {
   fn hover_file(
     &mut self,
     sender: OneshotSender<HoverFileResponse>,
-    location: &Utf8Location,
+    location: Utf8Location,
   ) -> Result<(), AnyhowError> {
+    let file = self.open_files.get(&location.filepath).context_path("file is not open", &location.filepath)?;
+    let location = location.into_utf16(&file.text);
     let uri = location.filepath.to_uri()?;
     let message = Message::text_document_hover_request(&uri, location.line, location.character);
     let request = Request::Hover(sender);
@@ -223,8 +225,10 @@ impl SessionRunner {
   fn get_plain_goals(
     &mut self,
     sender: OneshotSender<GetPlainGoalsResponse>,
-    location: &Utf8Location,
+    location: Utf8Location,
   ) -> Result<(), AnyhowError> {
+    let file = self.open_files.get(&location.filepath).context_path("file is not open", &location.filepath)?;
+    let location = location.into_utf16(&file.text);
     let uri = location.filepath.to_uri()?;
     let request_message = Message::lean_rpc_get_plain_goals_request(&uri, location.line, location.character);
     let request = Request::GetPlainGoals(sender);
@@ -257,9 +261,9 @@ impl SessionRunner {
       SessionCommand::ChangeFile { sender, filepath, text } => {
         self.change_file(&filepath, &text).send_to_oneshot(sender)
       }
-      SessionCommand::HoverFile { sender, location } => self.hover_file(sender, &location),
+      SessionCommand::HoverFile { sender, location } => self.hover_file(sender, location),
       SessionCommand::CloseFile { sender, filepath } => self.close_file(&filepath).send_to_oneshot(sender),
-      SessionCommand::GetPlainGoals { sender, location } => self.get_plain_goals(sender, &location),
+      SessionCommand::GetPlainGoals { sender, location } => self.get_plain_goals(sender, location),
       SessionCommand::GetStatus { sender } => self.get_status().send_to_oneshot(sender),
       SessionCommand::Kill { sender } => self.kill().send_to_oneshot(sender),
     }
