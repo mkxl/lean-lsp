@@ -38,6 +38,28 @@ pub struct SessionResult {
   pub result: Result<(), AnyhowError>,
 }
 
+struct File {
+  text: String,
+  version: usize,
+}
+
+impl File {
+  fn new(text: String) -> Self {
+    Self {
+      text,
+      version: INITIAL_TEXT_DOCUMENT_VERSION,
+    }
+  }
+
+  fn version(&self) -> usize {
+    self.version
+  }
+
+  fn set_version(&mut self, version: usize) {
+    self.version = version;
+  }
+}
+
 pub struct SessionRunner {
   id: Ulid,
   lean_server: LeanServer,
@@ -45,7 +67,7 @@ pub struct SessionRunner {
   commands: MpscUnboundedReceiverStream<SessionCommand>,
   requests: HashMap<Id, Request>,
   notifications: BroadcastSender<Json>,
-  open_file_versions: HashMap<PathBuf, usize>,
+  open_files: HashMap<PathBuf, File>,
   kill_event_sender: EventSender,
   kill_event_receiver: EventReceiver,
 }
@@ -64,7 +86,7 @@ impl SessionRunner {
     let project_dirpath = Self::project_dirpath(lean_path)?;
     let lean_server = LeanServer::new(&project_dirpath, lean_server_log_dirpath)?;
     let requests = HashMap::default();
-    let open_file_versions = HashMap::new();
+    let open_files = HashMap::new();
     let (kill_event_sender, kill_event_receiver) = Event::new();
     let session_runner = Self {
       id,
@@ -73,7 +95,7 @@ impl SessionRunner {
       commands,
       requests,
       notifications,
-      open_file_versions,
+      open_files,
       kill_event_sender,
       kill_event_receiver,
     };
@@ -114,7 +136,7 @@ impl SessionRunner {
 
   #[tracing::instrument(skip_all)]
   async fn open_file(&mut self, filepath: PathBuf) -> Result<(), AnyhowError> {
-    if self.open_file_versions.contains_key(&filepath) {
+    if self.open_files.contains_key(&filepath) {
       anyhow::bail!("file {} is already open", filepath.display());
     }
 
@@ -143,33 +165,32 @@ impl SessionRunner {
     self.send_request(text_document_folding_range_request, Request::TextDocumentFoldingRange)?;
     self.send_request(lean_rpc_connect_request, Request::LeanRpcConnect)?;
 
-    self.open_file_versions.insert(filepath, INITIAL_TEXT_DOCUMENT_VERSION);
+    self.open_files.insert(filepath, File::new(text));
 
     ().ok()
   }
 
   #[tracing::instrument(skip_all)]
   fn change_file(&mut self, filepath: &Path, text: &str) -> Result<(), AnyhowError> {
-    let version = self
-      .open_file_versions
+    let file = self
+      .open_files
       .get_mut(filepath)
       .context_path("file is not open", filepath)?;
-    let new_version = *version + 1;
-
+    let new_version = file.version() + 1;
     let uri = filepath.to_uri()?;
     let text_document_did_change_notification = Message::text_document_did_change_notification(text, &uri, new_version);
 
     self.lean_server.send(text_document_did_change_notification)?;
 
     // only increment the version if the request was successfully sent
-    *version += 1;
+    file.set_version(new_version);
 
     ().ok()
   }
 
   #[tracing::instrument(skip_all)]
   fn close_file(&mut self, filepath: &Path) -> Result<(), AnyhowError> {
-    if !self.open_file_versions.contains_key(filepath) {
+    if !self.open_files.contains_key(filepath) {
       anyhow::bail!("file {} is not open", filepath.display());
     }
 
@@ -178,7 +199,7 @@ impl SessionRunner {
 
     self.lean_server.send(text_document_did_close_notification)?;
 
-    self.open_file_versions.remove(filepath);
+    self.open_files.remove(filepath);
 
     ().ok()
   }
