@@ -43,4 +43,8 @@ impl SessionSet {
   pub async fn get_session(&self, session_id: Option<Ulid>) -> Result<Session, AnyhowError> {
     crate::macros::run_command!(self, SessionSetCommand::GetSession, session_id)
   }
+
+  pub async fn kill(&self) -> Result<(), AnyhowError> {
+    crate::macros::run_command!(self, SessionSetCommand::Kill)
+  }
 }

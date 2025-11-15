@@ -5,7 +5,7 @@ use std::{
 
 use anyhow::{Context, Error as AnyhowError};
 use bytes::{Buf, BytesMut};
-use mkutils::{IntoStream, Process, ToValue, Utils};
+use mkutils::{Event, EventReceiver, EventSender, IntoStream, Process, ToValue, Utils};
 use serde::{Serialize, de::DeserializeOwned};
 use tokio::{
   io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader},
@@ -71,7 +71,7 @@ struct LeanServerProcess {
   stdin: ChildStdin,
   stdout: LeanServerStdout,
   stderr: LinesStream<BufReader<ChildStderr>>,
-  kill_stream: MpscUnboundedReceiverStream<()>,
+  kill_event: EventReceiver,
 }
 
 impl LeanServerProcess {
@@ -83,13 +83,12 @@ impl LeanServerProcess {
     log_dirpath: Option<&Path>,
     inputs: MpscUnboundedReceiver<Vec<u8>>,
     outputs: MpscUnboundedSender<BytesMut>,
-    kill_reciver: MpscUnboundedReceiver<()>,
+    kill_event: EventReceiver,
   ) -> Result<Self, AnyhowError> {
     let inputs = inputs.into_stream();
     let (child, stdin, stdout, stderr) = Self::process(&project_dirpath.absolute()?, log_dirpath)?.into_parts();
     let stdout = LeanServerStdout::new(stdout);
     let stderr = stderr.buf_reader_async().lines().into_stream();
-    let kill_stream = kill_reciver.into_stream();
     let lean_server = Self {
       child,
       inputs,
@@ -97,7 +96,7 @@ impl LeanServerProcess {
       stdin,
       stdout,
       stderr,
-      kill_stream,
+      kill_event,
     };
 
     lean_server.ok()
@@ -130,7 +129,7 @@ impl LeanServerProcess {
         output_byte_str_res = self.stdout.next_message() => self.outputs.send(output_byte_str_res?)?,
         message_res = self.stderr.next_item_async() => tracing::warn!(stderr_message = message_res??, "stderr message"),
         exit_status_res = self.child.wait() => tracing::warn!(exit_status = %exit_status_res?, "lean server process ended"),
-        unit_res = self.kill_stream.next_item_async() => return unit_res?.with(self).child.kill().await?.ok(),
+        () = self.kill_event.wait() => return self.child.kill().await?.ok(),
       }
     }
   }
@@ -141,7 +140,7 @@ pub struct LeanServer {
   outputs: MpscUnboundedReceiverStream<BytesMut>,
   project_dirpath: PathBuf,
   process_handle: JoinHandle<Result<(), AnyhowError>>,
-  kill_sender: MpscUnboundedSender<()>,
+  kill_event: EventSender,
 }
 
 impl LeanServer {
@@ -153,13 +152,13 @@ impl LeanServer {
     let (inputs, process_inputs) = tokio::sync::mpsc::unbounded_channel();
     let (process_outputs, outputs) = tokio::sync::mpsc::unbounded_channel();
     let outputs = outputs.into_stream();
-    let (kill_sender, kill_receiver) = tokio::sync::mpsc::unbounded_channel();
+    let (kill_event, process_kill_event) = Event::new();
     let process_handle = LeanServerProcess::new(
       &project_dirpath,
       log_dirpath,
       process_inputs,
       process_outputs,
-      kill_receiver,
+      process_kill_event,
     )?
     .run()
     .spawn_task();
@@ -168,7 +167,7 @@ impl LeanServer {
       outputs,
       project_dirpath,
       process_handle,
-      kill_sender,
+      kill_event,
     };
 
     lean_server.ok()
@@ -206,7 +205,7 @@ impl LeanServer {
     self.process_handle.is_finished().into()
   }
 
-  pub fn kill(&self) -> Result<(), AnyhowError> {
-    self.kill_sender.send(())?.ok()
+  pub fn kill(&mut self) {
+    self.kill_event.set();
   }
 }

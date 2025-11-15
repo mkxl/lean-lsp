@@ -38,7 +38,7 @@ impl Session {
       lean_path,
       lean_server_log_dirpath,
     )?;
-    let session = Session {
+    let session = Self {
       id,
       commands,
       notifications,
@@ -85,6 +85,6 @@ impl Session {
   }
 
   pub async fn kill(&self) -> Result<(), AnyhowError> {
-    crate::macros::run_command!(self, SessionCommand::Kill)
+    crate::macros::run_command!(self, SessionCommand::Kill).ok()
   }
 }
