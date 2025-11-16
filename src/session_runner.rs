@@ -234,10 +234,7 @@ impl SessionRunner {
     sender: OneshotSender<GetPlainGoalsResponse>,
     location: Utf8Location,
   ) -> Result<(), AnyhowError> {
-    let file = self
-      .open_files
-      .get(&location.filepath)
-      .context_path("file is not open", &location.filepath)?;
+    let file = self.get_file(&location.filepath)?;
     let location = Utf16Location::new(location, file.text());
     let uri = location.filepath.to_uri()?;
     let request_message = Message::lean_rpc_get_plain_goals_request(&uri, location.line, location.character);
