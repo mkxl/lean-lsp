@@ -6,48 +6,68 @@ use poem_openapi::Object;
 use serde::{Deserialize, Serialize};
 use ulid::Ulid;
 
+#[derive(Deserialize, Object, Serialize)]
+pub struct PlainGoals {
+  pub goals: Vec<String>,
+  pub rendered: String,
+}
+
 #[derive(Deserialize, From, Object, Serialize)]
 pub struct TaskStatus {
   pub is_finished: bool,
 }
 
 #[derive(Args, Constructor, Deserialize, Object, Serialize)]
+pub struct Utf8Position {
+  #[arg(long)]
+  pub line: usize,
+  #[arg(long)]
+  pub character: usize,
+}
+
+#[derive(Args, Object, Deserialize, Serialize)]
 pub struct Utf8Location {
   pub filepath: PathBuf,
 
-  #[arg(long)]
-  pub line: usize,
-
-  #[arg(long)]
-  pub character: usize,
+  #[command(flatten)]
+  #[serde(flatten)]
+  pub position: Utf8Position,
 }
 
-// No Constructor derive. UTF-16 locations can only be created from a UTF-8
-// location, or deserialized from a server message.
+impl Utf8Location {
+  pub fn new(filepath: PathBuf, line: usize, character: usize) -> Self {
+    let position = Utf8Position::new(line, character);
+
+    Self { filepath, position }
+  }
+}
+
 #[derive(Deserialize, Serialize)]
-pub struct Utf16Location {
-  pub filepath: PathBuf,
+pub struct Utf16Position {
   pub line: usize,
   pub character: usize,
 }
 
-impl Utf16Location {
-  pub fn new(location: Utf8Location, text: &str) -> Self {
-    let line_str = text.lines().nth(location.line).unwrap_or_default();
-    let utf16_offset = line_str.chars().take(location.character).map(char::len_utf16).sum();
+impl Utf16Position {
+  pub fn new(location: &Utf8Location, text: &str) -> Self {
+    let line_str = text.lines().nth(location.position.line).unwrap_or_default();
+    let utf16_offset = line_str
+      .chars()
+      .take(location.position.character)
+      .map(char::len_utf16)
+      .sum();
 
     Self {
-      filepath: location.filepath,
-      line: location.line,
+      line: location.position.line,
       character: utf16_offset,
     }
   }
 }
 
-#[derive(Deserialize, Object, Serialize)]
-pub struct PlainGoals {
-  pub goals: Vec<String>,
-  pub rendered: String,
+#[derive(Deserialize, Serialize)]
+pub struct Utf16Range {
+  pub start: Utf16Position,
+  pub end: Utf16Position,
 }
 
 #[derive(Deserialize, Object, Serialize)]

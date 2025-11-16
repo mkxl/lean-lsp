@@ -19,7 +19,7 @@ use crate::{
   lean_server::LeanServer,
   messages::{Id, Message, text_document::INITIAL_TEXT_DOCUMENT_VERSION},
   server::responses::{GetPlainGoalsResponse, HoverFileResponse},
-  types::{SessionStatus, Utf8Location, Utf16Location},
+  types::{SessionStatus, Utf8Location, Utf16Position},
 };
 
 #[derive(Display)]
@@ -218,9 +218,9 @@ impl SessionRunner {
     location: Utf8Location,
   ) -> Result<(), AnyhowError> {
     let file = self.get_file(&location.filepath)?;
-    let location = Utf16Location::new(location, file.text());
+    let position = Utf16Position::new(&location, file.text());
     let uri = location.filepath.to_uri()?;
-    let message = Message::text_document_hover_request(&uri, location.line, location.character);
+    let message = Message::text_document_hover_request(&uri, position.line, position.character);
     let request = Request::Hover(sender);
 
     self.send_request(message, request)?;
@@ -235,9 +235,9 @@ impl SessionRunner {
     location: Utf8Location,
   ) -> Result<(), AnyhowError> {
     let file = self.get_file(&location.filepath)?;
-    let location = Utf16Location::new(location, file.text());
+    let position = Utf16Position::new(&location, file.text());
     let uri = location.filepath.to_uri()?;
-    let request_message = Message::lean_rpc_get_plain_goals_request(&uri, location.line, location.character);
+    let request_message = Message::lean_rpc_get_plain_goals_request(&uri, position.line, position.character);
     let request = Request::GetPlainGoals(sender);
 
     self.send_request(request_message, request)
