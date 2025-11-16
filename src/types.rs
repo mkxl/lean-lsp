@@ -22,28 +22,26 @@ pub struct Utf8Location {
   pub character: usize,
 }
 
-impl Utf8Location {
-  pub fn into_utf16(self, text: &str) -> Utf16Location {
-    let line_str = text.lines().nth(self.line).unwrap_or("");
-    let utf16_offset = line_str
-      .chars()
-      .take(self.character)
-      .map(char::len_utf16)
-      .sum();
-
-    Utf16Location {
-      filepath: self.filepath,
-      line: self.line,
-      character: utf16_offset,
-    }
-  }
-}
-
+// No Constructor derive. UTF-16 locations can only be created from a UTF-8
+// location, or deserialized from a server message.
 #[derive(Deserialize, Serialize)]
 pub struct Utf16Location {
   pub filepath: PathBuf,
   pub line: usize,
   pub character: usize,
+}
+
+impl Utf16Location {
+  pub fn new(location: Utf8Location, text: &str) -> Self {
+    let line_str = text.lines().nth(location.line).unwrap_or_default();
+    let utf16_offset = line_str.chars().take(location.character).map(char::len_utf16).sum();
+
+    Self {
+      filepath: location.filepath,
+      line: location.line,
+      character: utf16_offset,
+    }
+  }
 }
 
 #[derive(Deserialize, Object, Serialize)]
