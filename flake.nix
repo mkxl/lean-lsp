@@ -53,6 +53,7 @@
           packages = [
             pkgs.pkg-config
             pkgs.openssl
+            pkgs.cargo-watch
             pkgs.tokio-console
 
             rust-toolchain
