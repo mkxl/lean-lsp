@@ -19,7 +19,7 @@ use crate::{
   lean_server::LeanServer,
   messages::{Id, Message, text_document::INITIAL_TEXT_DOCUMENT_VERSION},
   server::responses::{GetPlainGoalsResponse, HoverFileResponse},
-  types::{Location, SessionStatus},
+  types::{SessionStatus, Utf8Location, Utf16Location},
 };
 
 #[derive(Display)]
@@ -38,6 +38,30 @@ pub struct SessionResult {
   pub result: Result<(), AnyhowError>,
 }
 
+struct File {
+  text: String,
+  version: usize,
+}
+
+impl File {
+  fn new(text: String) -> Self {
+    Self {
+      text,
+      version: INITIAL_TEXT_DOCUMENT_VERSION,
+    }
+  }
+
+  fn text(&self) -> &str {
+    &self.text
+  }
+
+  fn inc_version(&mut self) -> usize {
+    self.version += 1;
+
+    self.version
+  }
+}
+
 pub struct SessionRunner {
   id: Ulid,
   lean_server: LeanServer,
@@ -45,7 +69,7 @@ pub struct SessionRunner {
   commands: MpscUnboundedReceiverStream<SessionCommand>,
   requests: HashMap<Id, Request>,
   notifications: BroadcastSender<Json>,
-  open_file_versions: HashMap<PathBuf, usize>,
+  open_files: HashMap<PathBuf, File>,
   kill_event_sender: EventSender,
   kill_event_receiver: EventReceiver,
 }
@@ -64,7 +88,7 @@ impl SessionRunner {
     let project_dirpath = Self::project_dirpath(lean_path)?;
     let lean_server = LeanServer::new(&project_dirpath, lean_server_log_dirpath)?;
     let requests = HashMap::default();
-    let open_file_versions = HashMap::new();
+    let open_files = HashMap::new();
     let (kill_event_sender, kill_event_receiver) = Event::new();
     let session_runner = Self {
       id,
@@ -73,7 +97,7 @@ impl SessionRunner {
       commands,
       requests,
       notifications,
-      open_file_versions,
+      open_files,
       kill_event_sender,
       kill_event_receiver,
     };
@@ -112,9 +136,20 @@ impl SessionRunner {
     self.send_request(request_message, request)
   }
 
+  fn get_file(&self, filepath: &Path) -> Result<&File, AnyhowError> {
+    self.open_files.get(filepath).context_path("file is not open", filepath)
+  }
+
+  fn get_file_mut(&mut self, filepath: &Path) -> Result<&mut File, AnyhowError> {
+    self
+      .open_files
+      .get_mut(filepath)
+      .context_path("file is not open", filepath)
+  }
+
   #[tracing::instrument(skip_all)]
   async fn open_file(&mut self, filepath: PathBuf) -> Result<(), AnyhowError> {
-    if self.open_file_versions.contains_key(&filepath) {
+    if self.open_files.contains_key(&filepath) {
       anyhow::bail!("file {} is already open", filepath.display());
     }
 
@@ -143,33 +178,26 @@ impl SessionRunner {
     self.send_request(text_document_folding_range_request, Request::TextDocumentFoldingRange)?;
     self.send_request(lean_rpc_connect_request, Request::LeanRpcConnect)?;
 
-    self.open_file_versions.insert(filepath, INITIAL_TEXT_DOCUMENT_VERSION);
+    self.open_files.insert(filepath, File::new(text));
 
     ().ok()
   }
 
   #[tracing::instrument(skip_all)]
   fn change_file(&mut self, filepath: &Path, text: &str) -> Result<(), AnyhowError> {
-    let version = self
-      .open_file_versions
-      .get_mut(filepath)
-      .context_path("file is not open", filepath)?;
-    let new_version = *version + 1;
-
+    let file = self.get_file_mut(filepath)?;
+    let new_version = file.inc_version();
     let uri = filepath.to_uri()?;
     let text_document_did_change_notification = Message::text_document_did_change_notification(text, &uri, new_version);
 
     self.lean_server.send(text_document_did_change_notification)?;
-
-    // only increment the version if the request was successfully sent
-    *version += 1;
 
     ().ok()
   }
 
   #[tracing::instrument(skip_all)]
   fn close_file(&mut self, filepath: &Path) -> Result<(), AnyhowError> {
-    if !self.open_file_versions.contains_key(filepath) {
+    if !self.open_files.contains_key(filepath) {
       anyhow::bail!("file {} is not open", filepath.display());
     }
 
@@ -178,13 +206,19 @@ impl SessionRunner {
 
     self.lean_server.send(text_document_did_close_notification)?;
 
-    self.open_file_versions.remove(filepath);
+    self.open_files.remove(filepath);
 
     ().ok()
   }
 
   #[tracing::instrument(skip_all)]
-  fn hover_file(&mut self, sender: OneshotSender<HoverFileResponse>, location: &Location) -> Result<(), AnyhowError> {
+  fn hover_file(
+    &mut self,
+    sender: OneshotSender<HoverFileResponse>,
+    location: Utf8Location,
+  ) -> Result<(), AnyhowError> {
+    let file = self.get_file(&location.filepath)?;
+    let location = Utf16Location::new(location, file.text());
     let uri = location.filepath.to_uri()?;
     let message = Message::text_document_hover_request(&uri, location.line, location.character);
     let request = Request::Hover(sender);
@@ -198,8 +232,10 @@ impl SessionRunner {
   fn get_plain_goals(
     &mut self,
     sender: OneshotSender<GetPlainGoalsResponse>,
-    location: &Location,
+    location: Utf8Location,
   ) -> Result<(), AnyhowError> {
+    let file = self.get_file(&location.filepath)?;
+    let location = Utf16Location::new(location, file.text());
     let uri = location.filepath.to_uri()?;
     let request_message = Message::lean_rpc_get_plain_goals_request(&uri, location.line, location.character);
     let request = Request::GetPlainGoals(sender);
@@ -232,9 +268,9 @@ impl SessionRunner {
       SessionCommand::ChangeFile { sender, filepath, text } => {
         self.change_file(&filepath, &text).send_to_oneshot(sender)
       }
-      SessionCommand::HoverFile { sender, location } => self.hover_file(sender, &location),
+      SessionCommand::HoverFile { sender, location } => self.hover_file(sender, location),
       SessionCommand::CloseFile { sender, filepath } => self.close_file(&filepath).send_to_oneshot(sender),
-      SessionCommand::GetPlainGoals { sender, location } => self.get_plain_goals(sender, &location),
+      SessionCommand::GetPlainGoals { sender, location } => self.get_plain_goals(sender, location),
       SessionCommand::GetStatus { sender } => self.get_status().send_to_oneshot(sender),
       SessionCommand::Kill { sender } => self.kill().send_to_oneshot(sender),
     }

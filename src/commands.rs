@@ -12,7 +12,7 @@ use crate::{
   lean_server::LeanServer,
   server::responses::{GetPlainGoalsResponse, HoverFileResponse},
   session::Session,
-  types::{Location, SessionStatus},
+  types::{SessionStatus, Utf8Location},
 };
 
 pub enum SessionCommand {
@@ -34,11 +34,11 @@ pub enum SessionCommand {
   },
   HoverFile {
     sender: OneshotSender<HoverFileResponse>,
-    location: Location,
+    location: Utf8Location,
   },
   GetPlainGoals {
     sender: OneshotSender<GetPlainGoalsResponse>,
-    location: Location,
+    location: Utf8Location,
   },
   GetStatus {
     sender: OneshotSender<SessionStatus>,
@@ -90,7 +90,7 @@ pub struct HoverFileCommand {
   #[arg(long)]
   pub session_id: Option<Ulid>,
   #[command(flatten)]
-  pub location: Location,
+  pub location: Utf8Location,
 }
 
 pub enum SessionSetCommand {

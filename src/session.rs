@@ -11,7 +11,7 @@ use crate::{
   commands::SessionCommand,
   server::responses::{GetPlainGoalsResponse, HoverFileResponse},
   session_runner::SessionRunner,
-  types::{Location, SessionStatus},
+  types::{SessionStatus, Utf8Location},
 };
 
 #[derive(Clone)]
@@ -68,11 +68,11 @@ impl Session {
     crate::macros::run_command!(self, SessionCommand::CloseFile, filepath)
   }
 
-  pub async fn hover_file(&self, location: Location) -> Result<HoverFileResponse, AnyhowError> {
+  pub async fn hover_file(&self, location: Utf8Location) -> Result<HoverFileResponse, AnyhowError> {
     crate::macros::run_command!(self, SessionCommand::HoverFile, location).ok()
   }
 
-  pub async fn get_plain_goals(&self, location: Location) -> Result<GetPlainGoalsResponse, AnyhowError> {
+  pub async fn get_plain_goals(&self, location: Utf8Location) -> Result<GetPlainGoalsResponse, AnyhowError> {
     crate::macros::run_command!(self, SessionCommand::GetPlainGoals, location).ok()
   }
 

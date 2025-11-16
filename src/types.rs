@@ -12,7 +12,7 @@ pub struct TaskStatus {
 }
 
 #[derive(Args, Constructor, Deserialize, Object, Serialize)]
-pub struct Location {
+pub struct Utf8Location {
   pub filepath: PathBuf,
 
   #[arg(long)]
@@ -20,6 +20,28 @@ pub struct Location {
 
   #[arg(long)]
   pub character: usize,
+}
+
+// No Constructor derive. UTF-16 locations can only be created from a UTF-8
+// location, or deserialized from a server message.
+#[derive(Deserialize, Serialize)]
+pub struct Utf16Location {
+  pub filepath: PathBuf,
+  pub line: usize,
+  pub character: usize,
+}
+
+impl Utf16Location {
+  pub fn new(location: Utf8Location, text: &str) -> Self {
+    let line_str = text.lines().nth(location.line).unwrap_or_default();
+    let utf16_offset = line_str.chars().take(location.character).map(char::len_utf16).sum();
+
+    Self {
+      filepath: location.filepath,
+      line: location.line,
+      character: utf16_offset,
+    }
+  }
 }
 
 #[derive(Deserialize, Object, Serialize)]
