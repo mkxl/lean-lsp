@@ -38,6 +38,7 @@ pub struct Utf8Location {
 
   #[command(flatten)]
   #[serde(flatten)]
+  #[oai(flatten)]
   pub position: Utf8Position,
 }
 
@@ -49,7 +50,7 @@ impl Utf8Location {
   }
 }
 
-#[derive(Constructor, Serialize)]
+#[derive(Clone, Copy, Constructor, Serialize)]
 pub struct Utf16Position {
   pub line: usize,
   pub character: usize,

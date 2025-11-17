@@ -218,10 +218,10 @@ impl SessionRunner {
   fn hover_file(
     &mut self,
     sender: OneshotSender<HoverFileResponse>,
-    location: Utf8Location,
+    location: &Utf8Location,
   ) -> Result<(), AnyhowError> {
     let file = self.get_file(&location.filepath)?;
-    let position = Utf16Position::from_utf8(&location, file.text());
+    let position = Utf16Position::from_utf8(location, file.text());
     let uri = location.filepath.to_uri()?;
     let message = Message::text_document_hover_request(&uri, position.line, position.character);
     let request = Request::Hover(sender);
@@ -235,10 +235,10 @@ impl SessionRunner {
   fn get_plain_goals(
     &mut self,
     sender: OneshotSender<GetPlainGoalsResponse>,
-    location: Utf8Location,
+    location: &Utf8Location,
   ) -> Result<(), AnyhowError> {
     let file = self.get_file(&location.filepath)?;
-    let position = Utf16Position::from_utf8(&location, file.text());
+    let position = Utf16Position::from_utf8(location, file.text());
     let uri = location.filepath.to_uri()?;
     let request_message = Message::lean_rpc_get_plain_goals_request(&uri, position.line, position.character);
     let request = Request::GetPlainGoals(sender);
@@ -267,14 +267,17 @@ impl SessionRunner {
     match message {
       Json::Array(arr) => {
         for value in arr {
-          self.enrich_utf16_positions(value, lines)
+          self.enrich_utf16_positions(value, lines);
         }
       }
 
       Json::Object(map) => {
         let uri = map.get("uri").and_then(Json::as_str);
-        let text_document_uri = map.get("textDocument").and_then(|doc| doc.as_object()?.get("uri")?.as_str());
-        let new_lines: Option<Vec<&str>> = uri.or(text_document_uri)
+        let text_document_uri = map
+          .get("textDocument")
+          .and_then(|doc| doc.as_object()?.get("uri")?.as_str());
+        let new_lines: Option<Vec<&str>> = uri
+          .or(text_document_uri)
           .and_then(|uri| self.get_file(Path::new(&uri[7..])).ok())
           .map(|file| file.text().lines().collect());
         let lines = new_lines.as_deref().or(lines);
@@ -286,16 +289,31 @@ impl SessionRunner {
         let line = map.get("line").and_then(Json::as_u64);
         let character = map.get("character").and_then(Json::as_u64);
 
-        match (lines, line, character) {
-          (Some(lines), Some(line), Some(character)) => {
-            let utf16_position = Utf16Position::new(line as usize, character as usize);
-            if let Some((utf8_position, bytes_position)) = utf16_position.into_utf8_and_bytes(lines) {
-              map.insert("character_utf8".to_string(), serde_json::json!(utf8_position.character));
-              map.insert("character_bytes".to_string(), serde_json::json!(bytes_position.character));
+        if let (Some(lines), Some(line), Some(character)) = (lines, line, character) {
+          let utf16_position = Utf16Position::new(line as usize, character as usize);
+          if let Some((utf8_position, bytes_position)) = utf16_position.into_utf8_and_bytes(lines) {
+            map.insert(
+              "character_bytes".to_string(),
+              serde_json::json!(bytes_position.character),
+            );
+            map.insert("character_utf8".to_string(), serde_json::json!(utf8_position.character));
+
+            if utf16_position.character == 0
+              && let Some(prev_line) = lines.get(utf16_position.line - 1)
+            {
+              let prev_line_len_bytes = prev_line.len();
+              let prev_line_len_utf8 = prev_line.chars().count();
+
+              map.insert(
+                "previous_line_length_bytes".to_string(),
+                serde_json::json!(prev_line_len_bytes),
+              );
+              map.insert(
+                "previous_line_length_utf8".to_string(),
+                serde_json::json!(prev_line_len_utf8),
+              );
             }
           }
-
-          _ => (),
         }
       }
 
@@ -311,9 +329,9 @@ impl SessionRunner {
       SessionCommand::ChangeFile { sender, filepath, text } => {
         self.change_file(&filepath, &text).send_to_oneshot(sender)
       }
-      SessionCommand::HoverFile { sender, location } => self.hover_file(sender, location),
+      SessionCommand::HoverFile { sender, location } => self.hover_file(sender, &location),
       SessionCommand::CloseFile { sender, filepath } => self.close_file(&filepath).send_to_oneshot(sender),
-      SessionCommand::GetPlainGoals { sender, location } => self.get_plain_goals(sender, location),
+      SessionCommand::GetPlainGoals { sender, location } => self.get_plain_goals(sender, &location),
       SessionCommand::GetStatus { sender } => self.get_status().send_to_oneshot(sender),
       SessionCommand::Kill { sender } => self.kill().send_to_oneshot(sender),
     }
