@@ -24,6 +24,9 @@ impl Stream {
           .new_session(
             message_json.take_json("lean_path")?,
             message_json.take_json("lean_server_log_dirpath")?,
+            message_json
+              .take_json::<Option<bool>>("enrich_utf16_position")?
+              .unwrap_or_default(),
           )
           .await?
           .id()

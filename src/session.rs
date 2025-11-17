@@ -27,6 +27,7 @@ impl Session {
   pub fn new(
     lean_path: &Path,
     lean_server_log_dirpath: Option<&Path>,
+    enrich_utf16_positions: bool,
   ) -> Result<(Session, SessionRunner), AnyhowError> {
     let id = Ulid::new();
     let (commands, runner_commands) = tokio::sync::mpsc::unbounded_channel();
@@ -37,6 +38,7 @@ impl Session {
       notifications.clone(),
       lean_path,
       lean_server_log_dirpath,
+      enrich_utf16_positions,
     )?;
     let session = Self {
       id,

@@ -55,6 +55,9 @@ pub struct NewSessionCommand {
 
   #[arg(long = "log-dir", env = Self::LEAN_SERVER_LOG_DIRPATH_ENV_NAME)]
   pub lean_server_log_dirpath: Option<PathBuf>,
+
+  #[arg(long, default_value_t)]
+  pub enrich_utf16_positions: bool,
 }
 
 impl NewSessionCommand {

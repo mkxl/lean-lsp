@@ -2,6 +2,7 @@ use std::path::PathBuf;
 
 use clap::Args;
 use derive_more::{Constructor, From};
+use mkutils::Utils;
 use poem_openapi::Object;
 use serde::{Deserialize, Serialize};
 use ulid::Ulid;
@@ -15,6 +16,12 @@ pub struct PlainGoals {
 #[derive(Deserialize, From, Object, Serialize)]
 pub struct TaskStatus {
   pub is_finished: bool,
+}
+
+#[derive(Constructor, Serialize)]
+pub struct BytesPosition {
+  pub line: usize,
+  pub character: usize,
 }
 
 #[derive(Args, Constructor, Deserialize, Object, Serialize)]
@@ -42,14 +49,14 @@ impl Utf8Location {
   }
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Constructor, Serialize)]
 pub struct Utf16Position {
   pub line: usize,
   pub character: usize,
 }
 
 impl Utf16Position {
-  pub fn new(location: &Utf8Location, text: &str) -> Self {
+  pub fn from_utf8(location: &Utf8Location, text: &str) -> Self {
     let line_str = text.lines().nth(location.position.line).unwrap_or_default();
     let utf16_offset = line_str
       .chars()
@@ -62,12 +69,31 @@ impl Utf16Position {
       character: utf16_offset,
     }
   }
-}
 
-#[derive(Deserialize, Serialize)]
-pub struct Utf16Range {
-  pub start: Utf16Position,
-  pub end: Utf16Position,
+  pub fn into_utf8_and_bytes(self, lines: &[&str]) -> Option<(Utf8Position, BytesPosition)> {
+    let line_str = lines.get(self.line)?;
+    let mut utf16_remaining = self.character;
+    let mut utf8_offset = 0;
+    let mut bytes_offset = 0;
+
+    for c in line_str.chars() {
+      let utf16_len = c.len_utf16();
+      let bytes_len = c.len_utf8();
+
+      if utf16_remaining < utf16_len {
+        break;
+      }
+
+      utf16_remaining -= utf16_len;
+      utf8_offset += 1;
+      bytes_offset += bytes_len;
+    }
+
+    let utf8_position = Utf8Position::new(self.line, utf8_offset);
+    let bytes_position = BytesPosition::new(self.line, bytes_offset);
+
+    (utf8_position, bytes_position).some()
+  }
 }
 
 #[derive(Deserialize, Object, Serialize)]

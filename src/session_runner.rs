@@ -72,6 +72,7 @@ pub struct SessionRunner {
   open_files: HashMap<PathBuf, File>,
   kill_event_sender: EventSender,
   kill_event_receiver: EventReceiver,
+  enrich_utf16_positions: bool,
 }
 
 impl SessionRunner {
@@ -83,6 +84,7 @@ impl SessionRunner {
     notifications: BroadcastSender<Json>,
     lean_path: &Path,
     lean_server_log_dirpath: Option<&Path>,
+    enrich_utf16_positions: bool,
   ) -> Result<Self, AnyhowError> {
     let commands = commands.into_stream();
     let project_dirpath = Self::project_dirpath(lean_path)?;
@@ -100,6 +102,7 @@ impl SessionRunner {
       open_files,
       kill_event_sender,
       kill_event_receiver,
+      enrich_utf16_positions,
     };
 
     tracing::info!(%id, project_dirpath = %session_runner.project_dirpath.display(), "new session");
@@ -218,7 +221,7 @@ impl SessionRunner {
     location: Utf8Location,
   ) -> Result<(), AnyhowError> {
     let file = self.get_file(&location.filepath)?;
-    let position = Utf16Position::new(&location, file.text());
+    let position = Utf16Position::from_utf8(&location, file.text());
     let uri = location.filepath.to_uri()?;
     let message = Message::text_document_hover_request(&uri, position.line, position.character);
     let request = Request::Hover(sender);
@@ -235,7 +238,7 @@ impl SessionRunner {
     location: Utf8Location,
   ) -> Result<(), AnyhowError> {
     let file = self.get_file(&location.filepath)?;
-    let position = Utf16Position::new(&location, file.text());
+    let position = Utf16Position::from_utf8(&location, file.text());
     let uri = location.filepath.to_uri()?;
     let request_message = Message::lean_rpc_get_plain_goals_request(&uri, position.line, position.character);
     let request = Request::GetPlainGoals(sender);
@@ -258,6 +261,46 @@ impl SessionRunner {
   fn kill(&mut self) {
     self.lean_server.kill();
     self.kill_event_sender.set();
+  }
+
+  fn enrich_utf16_positions(&self, message: &mut Json, lines: Option<&[&str]>) {
+    match message {
+      Json::Array(arr) => {
+        for value in arr {
+          self.enrich_utf16_positions(value, lines)
+        }
+      }
+
+      Json::Object(map) => {
+        let uri = map.get("uri").and_then(Json::as_str);
+        let text_document_uri = map.get("textDocument").and_then(|doc| doc.as_object()?.get("uri")?.as_str());
+        let new_lines: Option<Vec<&str>> = uri.or(text_document_uri)
+          .and_then(|uri| self.get_file(Path::new(&uri[7..])).ok())
+          .map(|file| file.text().lines().collect());
+        let lines = new_lines.as_deref().or(lines);
+
+        for value in map.values_mut() {
+          self.enrich_utf16_positions(value, lines);
+        }
+
+        let line = map.get("line").and_then(Json::as_u64);
+        let character = map.get("character").and_then(Json::as_u64);
+
+        match (lines, line, character) {
+          (Some(lines), Some(line), Some(character)) => {
+            let utf16_position = Utf16Position::new(line as usize, character as usize);
+            if let Some((utf8_position, bytes_position)) = utf16_position.into_utf8_and_bytes(lines) {
+              map.insert("character_utf8".to_string(), serde_json::json!(utf8_position.character));
+              map.insert("character_bytes".to_string(), serde_json::json!(bytes_position.character));
+            }
+          }
+
+          _ => (),
+        }
+      }
+
+      _ => (),
+    }
   }
 
   #[tracing::instrument(skip_all)]
@@ -318,8 +361,12 @@ impl SessionRunner {
   }
 
   #[tracing::instrument(skip_all, err)]
-  fn process_message(&mut self, message: Json) -> Result<(), AnyhowError> {
+  fn process_message(&mut self, mut message: Json) -> Result<(), AnyhowError> {
     tracing::info!(received_message = message.to_value(), "received message");
+
+    if self.enrich_utf16_positions {
+      self.enrich_utf16_positions(&mut message, None);
+    }
 
     let Some(id) = message.get("id") else { return self.process_notification(message).ok() };
     let id = id.to_value_from_value::<Id>()?;

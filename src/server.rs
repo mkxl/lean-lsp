@@ -120,7 +120,11 @@ impl Server {
   ) -> Result<PoemJson<NewSessionResponse>, PoemError> {
     let session = self
       .session_set
-      .new_session(command.lean_path, command.lean_server_log_dirpath)
+      .new_session(
+        command.lean_path,
+        command.lean_server_log_dirpath,
+        command.enrich_utf16_positions,
+      )
       .await?;
 
     session.initialize().await?;
