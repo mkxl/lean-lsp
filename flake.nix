@@ -36,7 +36,7 @@
             lockFile = ./Cargo.lock;
 
             outputHashes = {
-              "mkutils-0.1.0" = "sha256-LQ6T0SiKmsHFlVZaTiGA9zNXQH/eSJIOnqSMxtgbQp4=";
+              "mkutils-0.1.0" = "sha256-yaNc1UWEcL1YipXG0SK03BRA4AQBOU4d5aQQYGwWOZk=";
               "poem-3.1.12" = "sha256-UokXA76/PKGAp6NDKlKkT6wkxWdD8wxj50wPXyhn228=";
             };
           };
