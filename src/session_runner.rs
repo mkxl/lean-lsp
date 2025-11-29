@@ -38,7 +38,7 @@ pub struct SessionResult {
   pub result: Result<(), AnyhowError>,
 }
 
-struct File {
+pub struct File {
   text: String,
   version: usize,
 }
@@ -51,14 +51,39 @@ impl File {
     }
   }
 
-  fn text(&self) -> &str {
+  pub fn text(&self) -> &str {
     &self.text
   }
 
-  fn inc_version(&mut self) -> usize {
+  pub fn inc_version(&mut self) -> usize {
     self.version += 1;
 
     self.version
+  }
+}
+
+#[derive(Default)]
+pub struct OpenFiles(HashMap<PathBuf, File>);
+
+impl OpenFiles {
+  pub fn contains(&self, filepath: &Path) -> bool {
+    self.0.contains_key(filepath)
+  }
+
+  pub fn get_file(&self, filepath: &Path) -> Result<&File, AnyhowError> {
+    self.0.get(filepath).context_path("file is not open", filepath)
+  }
+
+  pub fn get_file_mut(&mut self, filepath: &Path) -> Result<&mut File, AnyhowError> {
+    self.0.get_mut(filepath).context_path("file is not open", filepath)
+  }
+
+  pub fn insert(&mut self, filepath: PathBuf, file: File) -> Option<File> {
+    self.0.insert(filepath, file)
+  }
+
+  pub fn remove(&mut self, filepath: &Path) -> Option<File> {
+    self.0.remove(filepath)
   }
 }
 
@@ -69,7 +94,7 @@ pub struct SessionRunner {
   commands: MpscUnboundedReceiverStream<SessionCommand>,
   requests: HashMap<Id, Request>,
   notifications: BroadcastSender<Json>,
-  open_files: HashMap<PathBuf, File>,
+  open_files: OpenFiles,
   kill_event_sender: EventSender,
   kill_event_receiver: EventReceiver,
   enrich_utf16_positions: bool,
@@ -90,7 +115,7 @@ impl SessionRunner {
     let project_dirpath = Self::project_dirpath(lean_path)?;
     let lean_server = LeanServer::new(&project_dirpath, lean_server_log_dirpath)?;
     let requests = HashMap::default();
-    let open_files = HashMap::new();
+    let open_files = OpenFiles::default();
     let (kill_event_sender, kill_event_receiver) = Event::new();
     let session_runner = Self {
       id,
@@ -140,19 +165,16 @@ impl SessionRunner {
   }
 
   fn get_file(&self, filepath: &Path) -> Result<&File, AnyhowError> {
-    self.open_files.get(filepath).context_path("file is not open", filepath)
+    self.open_files.get_file(filepath)
   }
 
   fn get_file_mut(&mut self, filepath: &Path) -> Result<&mut File, AnyhowError> {
-    self
-      .open_files
-      .get_mut(filepath)
-      .context_path("file is not open", filepath)
+    self.open_files.get_file_mut(filepath)
   }
 
   #[tracing::instrument(skip_all)]
   async fn open_file(&mut self, filepath: PathBuf) -> Result<(), AnyhowError> {
-    if self.open_files.contains_key(&filepath) {
+    if self.open_files.contains(&filepath) {
       anyhow::bail!("file {} is already open", filepath.display());
     }
 
@@ -200,7 +222,7 @@ impl SessionRunner {
 
   #[tracing::instrument(skip_all)]
   fn close_file(&mut self, filepath: &Path) -> Result<(), AnyhowError> {
-    if !self.open_files.contains_key(filepath) {
+    if !self.open_files.contains(filepath) {
       anyhow::bail!("file {} is not open", filepath.display());
     }
 
@@ -221,7 +243,7 @@ impl SessionRunner {
     location: &Utf8Location,
   ) -> Result<(), AnyhowError> {
     let file = self.get_file(&location.filepath)?;
-    let position = Utf16Position::from_utf8(location, file.text());
+    let position = Utf16Position::from_utf8(location, file.text())?;
     let uri = location.filepath.to_uri()?;
     let message = Message::text_document_hover_request(&uri, position.line, position.character);
     let request = Request::Hover(sender);
@@ -238,7 +260,7 @@ impl SessionRunner {
     location: &Utf8Location,
   ) -> Result<(), AnyhowError> {
     let file = self.get_file(&location.filepath)?;
-    let position = Utf16Position::from_utf8(location, file.text());
+    let position = Utf16Position::from_utf8(location, file.text())?;
     let uri = location.filepath.to_uri()?;
     let request_message = Message::lean_rpc_get_plain_goals_request(&uri, position.line, position.character);
     let request = Request::GetPlainGoals(sender);
@@ -261,64 +283,6 @@ impl SessionRunner {
   fn kill(&mut self) {
     self.lean_server.kill();
     self.kill_event_sender.set();
-  }
-
-  fn enrich_utf16_positions(&self, message: &mut Json, lines: Option<&[&str]>) {
-    match message {
-      Json::Array(arr) => {
-        for value in arr {
-          self.enrich_utf16_positions(value, lines);
-        }
-      }
-
-      Json::Object(map) => {
-        let uri = map.get("uri").and_then(Json::as_str);
-        let text_document_uri = map
-          .get("textDocument")
-          .and_then(|doc| doc.as_object()?.get("uri")?.as_str());
-        let new_lines: Option<Vec<&str>> = uri
-          .or(text_document_uri)
-          .and_then(|uri| self.get_file(Path::new(&uri[7..])).ok())
-          .map(|file| file.text().lines().collect());
-        let lines = new_lines.as_deref().or(lines);
-
-        for value in map.values_mut() {
-          self.enrich_utf16_positions(value, lines);
-        }
-
-        let line = map.get("line").and_then(Json::as_u64);
-        let character = map.get("character").and_then(Json::as_u64);
-
-        if let (Some(lines), Some(line), Some(character)) = (lines, line, character) {
-          let utf16_position = Utf16Position::new(line as usize, character as usize);
-          if let Some((utf8_position, bytes_position)) = utf16_position.into_utf8_and_bytes(lines) {
-            map.insert(
-              "character_bytes".to_string(),
-              serde_json::json!(bytes_position.character),
-            );
-            map.insert("character_utf8".to_string(), serde_json::json!(utf8_position.character));
-
-            if utf16_position.character == 0
-              && let Some(prev_line) = lines.get(utf16_position.line - 1)
-            {
-              let prev_line_len_bytes = prev_line.len();
-              let prev_line_len_utf8 = prev_line.chars().count();
-
-              map.insert(
-                "previous_line_length_bytes".to_string(),
-                serde_json::json!(prev_line_len_bytes),
-              );
-              map.insert(
-                "previous_line_length_utf8".to_string(),
-                serde_json::json!(prev_line_len_utf8),
-              );
-            }
-          }
-        }
-      }
-
-      _ => (),
-    }
   }
 
   #[tracing::instrument(skip_all)]
@@ -383,7 +347,7 @@ impl SessionRunner {
     tracing::info!(received_message = message.to_value(), "received message");
 
     if self.enrich_utf16_positions {
-      self.enrich_utf16_positions(&mut message, None);
+      crate::utf_16::enrich_positions(&self.open_files, &mut message);
     }
 
     let Some(id) = message.get("id") else { return self.process_notification(message).ok() };

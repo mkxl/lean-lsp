@@ -1,5 +1,6 @@
 use std::path::PathBuf;
 
+use anyhow::{Context, Error as AnyhowError};
 use clap::Args;
 use derive_more::{Constructor, From};
 use mkutils::Utils;
@@ -57,8 +58,8 @@ pub struct Utf16Position {
 }
 
 impl Utf16Position {
-  pub fn from_utf8(location: &Utf8Location, text: &str) -> Self {
-    let line_str = text.lines().nth(location.position.line).unwrap_or_default();
+  pub fn from_utf8(location: &Utf8Location, text: &str) -> Result<Self, AnyhowError> {
+    let line_str = text.lines().nth(location.position.line).context("no such line")?;
     let utf16_offset = line_str
       .chars()
       .take(location.position.character)
@@ -69,9 +70,10 @@ impl Utf16Position {
       line: location.position.line,
       character: utf16_offset,
     }
+    .ok()
   }
 
-  pub fn into_utf8_and_bytes(self, lines: &[&str]) -> Option<(Utf8Position, BytesPosition)> {
+  pub fn into_utf8_and_bytes_positions(self, lines: &[&str]) -> Option<(Utf8Position, BytesPosition)> {
     let line_str = lines.get(self.line)?;
     let mut utf16_remaining = self.character;
     let mut utf8_offset = 0;

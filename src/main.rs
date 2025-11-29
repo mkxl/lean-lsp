@@ -13,6 +13,7 @@ mod session_set;
 mod session_set_runner;
 mod stream;
 mod types;
+mod utf_16;
 
 use anyhow::Error as AnyhowError;
 use clap::Parser;
