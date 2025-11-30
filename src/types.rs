@@ -33,7 +33,7 @@ pub struct Utf8Position {
   pub character: usize,
 }
 
-#[derive(Args, Object, Deserialize, Serialize)]
+#[derive(Args, Deserialize, Object, Serialize)]
 pub struct Utf8Location {
   pub filepath: PathBuf,
 
@@ -51,7 +51,7 @@ impl Utf8Location {
   }
 }
 
-#[derive(Clone, Copy, Constructor, Serialize)]
+#[derive(Clone, Constructor, Copy, Serialize)]
 pub struct Utf16Position {
   pub line: usize,
   pub character: usize,
