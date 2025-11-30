@@ -20,6 +20,7 @@ use crate::{
   messages::{Id, Message, text_document::INITIAL_TEXT_DOCUMENT_VERSION},
   server::responses::{GetPlainGoalsResponse, HoverFileResponse},
   types::{SessionStatus, Utf8Location, Utf16Position},
+  utf_16::PositionEnricher,
 };
 
 #[derive(Display)]
@@ -347,7 +348,9 @@ impl SessionRunner {
     tracing::info!(received_message = message.to_value(), "received message");
 
     if self.enrich_utf16_positions {
-      crate::utf_16::enrich_positions(&self.open_files, &mut message);
+      let position_enricher = PositionEnricher::new(&self.open_files);
+
+      position_enricher.enrich_positions(&mut message);
     }
 
     let Some(id) = message.get("id") else { return self.process_notification(message).ok() };

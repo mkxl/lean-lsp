@@ -1,5 +1,6 @@
 use std::path::Path;
 
+use derive_more::Constructor;
 use serde_json::Value as Json;
 
 use crate::{session_runner::OpenFiles, types::Utf16Position};
@@ -82,66 +83,73 @@ use crate::{session_runner::OpenFiles, types::Utf16Position};
 /// ```
 ///
 /// [`Position`]: https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#position
-pub fn enrich_positions(files: &OpenFiles, message: &mut Json) {
-  enrich_positions_impl(files, message, None);
+#[derive(Constructor)]
+pub struct PositionEnricher<'files> {
+  open_files: &'files OpenFiles,
 }
 
-fn enrich_positions_impl(files: &OpenFiles, message: &mut Json, lines: Option<&[&str]>) {
-  match message {
-    Json::Array(arr) => {
-      for value in arr {
-        enrich_positions_impl(files, value, lines);
-      }
-    }
+impl PositionEnricher<'_> {
+  pub fn enrich_positions(&self, message: &mut Json) {
+    self.enrich_positions_impl(message, None);
+  }
 
-    Json::Object(map) => {
-      let uri = map.get("uri").and_then(Json::as_str);
-      let text_document_uri = map
-        .get("textDocument")
-        .and_then(|doc| doc.as_object()?.get("uri")?.as_str());
-      let new_lines: Option<Vec<&str>> = uri
-        .or(text_document_uri)
-        .and_then(|uri| files.get_file(Path::new(&uri[7..])).ok())
-        .map(|file| file.text().lines().collect());
-      let lines = new_lines.as_deref().or(lines);
-
-      for value in map.values_mut() {
-        enrich_positions_impl(files, value, lines);
+  fn enrich_positions_impl(&self, message: &mut Json, lines: Option<&[&str]>) {
+    match message {
+      Json::Array(arr) => {
+        for value in arr {
+          self.enrich_positions_impl(value, lines);
+        }
       }
 
-      let line = map.get("line").and_then(Json::as_u64);
-      let character = map.get("character").and_then(Json::as_u64);
+      Json::Object(map) => {
+        let uri = map.get("uri").and_then(Json::as_str);
+        let text_document_uri = map
+          .get("textDocument")
+          .and_then(|doc| doc.as_object()?.get("uri")?.as_str());
+        let new_lines: Option<Vec<&str>> = uri
+          .or(text_document_uri)
+          .and_then(|uri| self.open_files.get_file(Path::new(&uri[7..])).ok())
+          .map(|file| file.text().lines().collect());
+        let lines = new_lines.as_deref().or(lines);
 
-      if let (Some(lines), Some(line), Some(character)) = (lines, line, character) {
-        #[allow(clippy::cast_possible_truncation)]
-        let utf16_position = Utf16Position::new(line as usize, character as usize);
+        for value in map.values_mut() {
+          self.enrich_positions_impl(value, lines);
+        }
 
-        if let Some((utf8_position, bytes_position)) = utf16_position.into_utf8_and_bytes_positions(lines) {
-          map.insert(
-            "character_bytes".to_owned(),
-            serde_json::json!(bytes_position.character),
-          );
-          map.insert("character_utf8".to_owned(), serde_json::json!(utf8_position.character));
+        let line = map.get("line").and_then(Json::as_u64);
+        let character = map.get("character").and_then(Json::as_u64);
 
-          if utf16_position.character == 0
-            && let Some(prev_line) = lines.get(utf16_position.line - 1)
-          {
-            let prev_line_len_bytes = prev_line.len();
-            let prev_line_len_utf8 = prev_line.chars().count();
+        if let (Some(lines), Some(line), Some(character)) = (lines, line, character) {
+          #[allow(clippy::cast_possible_truncation)]
+          let utf16_position = Utf16Position::new(line as usize, character as usize);
 
+          if let Some((utf8_position, bytes_position)) = utf16_position.into_utf8_and_bytes_positions(lines) {
             map.insert(
-              "previous_line_length_bytes".to_owned(),
-              serde_json::json!(prev_line_len_bytes),
+              "character_bytes".to_owned(),
+              serde_json::json!(bytes_position.character),
             );
-            map.insert(
-              "previous_line_length_utf8".to_owned(),
-              serde_json::json!(prev_line_len_utf8),
-            );
+            map.insert("character_utf8".to_owned(), serde_json::json!(utf8_position.character));
+
+            if utf16_position.character == 0
+              && let Some(prev_line) = lines.get(utf16_position.line - 1)
+            {
+              let prev_line_len_bytes = prev_line.len();
+              let prev_line_len_utf8 = prev_line.chars().count();
+
+              map.insert(
+                "previous_line_length_bytes".to_owned(),
+                serde_json::json!(prev_line_len_bytes),
+              );
+              map.insert(
+                "previous_line_length_utf8".to_owned(),
+                serde_json::json!(prev_line_len_utf8),
+              );
+            }
           }
         }
       }
-    }
 
-    _ => (),
+      _ => (),
+    }
   }
 }
