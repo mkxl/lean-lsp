@@ -41,6 +41,46 @@ use crate::{session_runner::OpenFiles, types::Utf16Position};
 /// Similarly, the positions in `object.range` will be modified to include
 /// the above properties using `"file:///some/other/file.txt"` as the source.
 ///
+/// The above json would be transformed to
+///
+/// ```json
+/// {
+///   "uri": "file:///some/file.txt",
+///   "positions": [
+///     {
+///       "line": 1,
+///       "character": 2,
+///       "character_bytes": ..,
+///       "character_utf8": ..,
+///       "previous_line_length_bytes": ..,
+///       "previous_line_length_utf8": ..
+///     }
+///     // ...
+///   ],
+///   "object": {
+///     "uri": "file:///some/other/file.txt",
+///     "range": {
+///       "start": {
+///         "line": 3,
+///         "character": 4,
+///         "character_bytes": ..,
+///         "character_utf8": ..,
+///         "previous_line_length_bytes": ..,
+///         "previous_line_length_utf8": ..
+///       },
+///       "end": {
+///         "line": 5,
+///         "character": 6,
+///         "character_bytes": ..,
+///         "character_utf8": ..,
+///         "previous_line_length_bytes": ..,
+///         "previous_line_length_utf8": ..
+///       }
+///     }
+///   }
+/// }
+/// ```
+///
 /// [`Position`]: https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#position
 pub fn enrich_positions(files: &OpenFiles, message: &mut Json) {
   enrich_positions_impl(files, message, None);
@@ -78,10 +118,10 @@ fn enrich_positions_impl(files: &OpenFiles, message: &mut Json, lines: Option<&[
 
         if let Some((utf8_position, bytes_position)) = utf16_position.into_utf8_and_bytes_positions(lines) {
           map.insert(
-            "character_bytes".to_string(),
+            "character_bytes".to_owned(),
             serde_json::json!(bytes_position.character),
           );
-          map.insert("character_utf8".to_string(), serde_json::json!(utf8_position.character));
+          map.insert("character_utf8".to_owned(), serde_json::json!(utf8_position.character));
 
           if utf16_position.character == 0
             && let Some(prev_line) = lines.get(utf16_position.line - 1)
@@ -90,11 +130,11 @@ fn enrich_positions_impl(files: &OpenFiles, message: &mut Json, lines: Option<&[
             let prev_line_len_utf8 = prev_line.chars().count();
 
             map.insert(
-              "previous_line_length_bytes".to_string(),
+              "previous_line_length_bytes".to_owned(),
               serde_json::json!(prev_line_len_bytes),
             );
             map.insert(
-              "previous_line_length_utf8".to_string(),
+              "previous_line_length_utf8".to_owned(),
               serde_json::json!(prev_line_len_utf8),
             );
           }
