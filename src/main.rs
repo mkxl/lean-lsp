@@ -6,6 +6,7 @@ mod commands;
 mod lean_server;
 mod macros;
 mod messages;
+mod open_files;
 mod server;
 mod session;
 mod session_runner;
@@ -13,7 +14,6 @@ mod session_set;
 mod session_set_runner;
 mod stream;
 mod types;
-mod utf_16;
 
 use anyhow::Error as AnyhowError;
 use clap::Parser;

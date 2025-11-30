@@ -18,9 +18,9 @@ use crate::{
   commands::SessionCommand,
   lean_server::LeanServer,
   messages::{Id, Message, text_document::INITIAL_TEXT_DOCUMENT_VERSION},
+  open_files::OpenFiles,
   server::responses::{GetPlainGoalsResponse, HoverFileResponse},
   types::{SessionStatus, Utf8Location, Utf16Position},
-  utf_16::PositionEnricher,
 };
 
 #[derive(Display)]
@@ -60,31 +60,6 @@ impl File {
     self.version += 1;
 
     self.version
-  }
-}
-
-#[derive(Default)]
-pub struct OpenFiles(HashMap<PathBuf, File>);
-
-impl OpenFiles {
-  pub fn contains(&self, filepath: &Path) -> bool {
-    self.0.contains_key(filepath)
-  }
-
-  pub fn get_file(&self, filepath: &Path) -> Result<&File, AnyhowError> {
-    self.0.get(filepath).context_path("file is not open", filepath)
-  }
-
-  pub fn get_file_mut(&mut self, filepath: &Path) -> Result<&mut File, AnyhowError> {
-    self.0.get_mut(filepath).context_path("file is not open", filepath)
-  }
-
-  pub fn insert(&mut self, filepath: PathBuf, file: File) -> Option<File> {
-    self.0.insert(filepath, file)
-  }
-
-  pub fn remove(&mut self, filepath: &Path) -> Option<File> {
-    self.0.remove(filepath)
   }
 }
 
@@ -348,9 +323,7 @@ impl SessionRunner {
     tracing::info!(received_message = message.to_value(), "received message");
 
     if self.enrich_utf16_positions {
-      let position_enricher = PositionEnricher::new(&self.open_files);
-
-      position_enricher.enrich_positions(&mut message);
+      self.open_files.enrich_positions(&mut message);
     }
 
     let Some(id) = message.get("id") else { return self.process_notification(message).ok() };
