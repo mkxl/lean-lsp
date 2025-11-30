@@ -18,8 +18,9 @@ use crate::{
   commands::SessionCommand,
   lean_server::LeanServer,
   messages::{Id, Message, text_document::INITIAL_TEXT_DOCUMENT_VERSION},
+  open_files::OpenFiles,
   server::responses::{GetPlainGoalsResponse, HoverFileResponse},
-  types::{SessionStatus, Utf8Location, Utf16Location},
+  types::{SessionStatus, Utf8Location, Utf16Position},
 };
 
 #[derive(Display)]
@@ -38,7 +39,7 @@ pub struct SessionResult {
   pub result: Result<(), AnyhowError>,
 }
 
-struct File {
+pub struct File {
   text: String,
   version: usize,
 }
@@ -51,11 +52,11 @@ impl File {
     }
   }
 
-  fn text(&self) -> &str {
+  pub fn text(&self) -> &str {
     &self.text
   }
 
-  fn inc_version(&mut self) -> usize {
+  pub fn inc_version(&mut self) -> usize {
     self.version += 1;
 
     self.version
@@ -69,9 +70,10 @@ pub struct SessionRunner {
   commands: MpscUnboundedReceiverStream<SessionCommand>,
   requests: HashMap<Id, Request>,
   notifications: BroadcastSender<Json>,
-  open_files: HashMap<PathBuf, File>,
+  open_files: OpenFiles,
   kill_event_sender: EventSender,
   kill_event_receiver: EventReceiver,
+  enrich_utf16_positions: bool,
 }
 
 impl SessionRunner {
@@ -83,12 +85,13 @@ impl SessionRunner {
     notifications: BroadcastSender<Json>,
     lean_path: &Path,
     lean_server_log_dirpath: Option<&Path>,
+    enrich_utf16_positions: bool,
   ) -> Result<Self, AnyhowError> {
     let commands = commands.into_stream();
     let project_dirpath = Self::project_dirpath(lean_path)?;
     let lean_server = LeanServer::new(&project_dirpath, lean_server_log_dirpath)?;
     let requests = HashMap::default();
-    let open_files = HashMap::new();
+    let open_files = OpenFiles::default();
     let (kill_event_sender, kill_event_receiver) = Event::new();
     let session_runner = Self {
       id,
@@ -100,6 +103,7 @@ impl SessionRunner {
       open_files,
       kill_event_sender,
       kill_event_receiver,
+      enrich_utf16_positions,
     };
 
     tracing::info!(%id, project_dirpath = %session_runner.project_dirpath.display(), "new session");
@@ -137,19 +141,16 @@ impl SessionRunner {
   }
 
   fn get_file(&self, filepath: &Path) -> Result<&File, AnyhowError> {
-    self.open_files.get(filepath).context_path("file is not open", filepath)
+    self.open_files.get_file(filepath)
   }
 
   fn get_file_mut(&mut self, filepath: &Path) -> Result<&mut File, AnyhowError> {
-    self
-      .open_files
-      .get_mut(filepath)
-      .context_path("file is not open", filepath)
+    self.open_files.get_file_mut(filepath)
   }
 
   #[tracing::instrument(skip_all)]
   async fn open_file(&mut self, filepath: PathBuf) -> Result<(), AnyhowError> {
-    if self.open_files.contains_key(&filepath) {
+    if self.open_files.contains(&filepath) {
       anyhow::bail!("file {} is already open", filepath.display());
     }
 
@@ -197,7 +198,7 @@ impl SessionRunner {
 
   #[tracing::instrument(skip_all)]
   fn close_file(&mut self, filepath: &Path) -> Result<(), AnyhowError> {
-    if !self.open_files.contains_key(filepath) {
+    if !self.open_files.contains(filepath) {
       anyhow::bail!("file {} is not open", filepath.display());
     }
 
@@ -215,12 +216,12 @@ impl SessionRunner {
   fn hover_file(
     &mut self,
     sender: OneshotSender<HoverFileResponse>,
-    location: Utf8Location,
+    location: &Utf8Location,
   ) -> Result<(), AnyhowError> {
     let file = self.get_file(&location.filepath)?;
-    let location = Utf16Location::new(location, file.text());
+    let position = Utf16Position::from_utf8(location, file.text())?;
     let uri = location.filepath.to_uri()?;
-    let message = Message::text_document_hover_request(&uri, location.line, location.character);
+    let message = Message::text_document_hover_request(&uri, position.line, position.character);
     let request = Request::Hover(sender);
 
     self.send_request(message, request)?;
@@ -232,12 +233,12 @@ impl SessionRunner {
   fn get_plain_goals(
     &mut self,
     sender: OneshotSender<GetPlainGoalsResponse>,
-    location: Utf8Location,
+    location: &Utf8Location,
   ) -> Result<(), AnyhowError> {
     let file = self.get_file(&location.filepath)?;
-    let location = Utf16Location::new(location, file.text());
+    let position = Utf16Position::from_utf8(location, file.text())?;
     let uri = location.filepath.to_uri()?;
-    let request_message = Message::lean_rpc_get_plain_goals_request(&uri, location.line, location.character);
+    let request_message = Message::lean_rpc_get_plain_goals_request(&uri, position.line, position.character);
     let request = Request::GetPlainGoals(sender);
 
     self.send_request(request_message, request)
@@ -268,9 +269,9 @@ impl SessionRunner {
       SessionCommand::ChangeFile { sender, filepath, text } => {
         self.change_file(&filepath, &text).send_to_oneshot(sender)
       }
-      SessionCommand::HoverFile { sender, location } => self.hover_file(sender, location),
+      SessionCommand::HoverFile { sender, location } => self.hover_file(sender, &location),
       SessionCommand::CloseFile { sender, filepath } => self.close_file(&filepath).send_to_oneshot(sender),
-      SessionCommand::GetPlainGoals { sender, location } => self.get_plain_goals(sender, location),
+      SessionCommand::GetPlainGoals { sender, location } => self.get_plain_goals(sender, &location),
       SessionCommand::GetStatus { sender } => self.get_status().send_to_oneshot(sender),
       SessionCommand::Kill { sender } => self.kill().send_to_oneshot(sender),
     }
@@ -318,8 +319,12 @@ impl SessionRunner {
   }
 
   #[tracing::instrument(skip_all, err)]
-  fn process_message(&mut self, message: Json) -> Result<(), AnyhowError> {
+  fn process_message(&mut self, mut message: Json) -> Result<(), AnyhowError> {
     tracing::info!(received_message = message.to_value(), "received message");
+
+    if self.enrich_utf16_positions {
+      self.open_files.enrich_positions(&mut message);
+    }
 
     let Some(id) = message.get("id") else { return self.process_notification(message).ok() };
     let id = id.to_value_from_value::<Id>()?;

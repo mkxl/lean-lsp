@@ -170,8 +170,8 @@ impl Client {
       .get(url)
       .query_one::<Ulid>(Server::QUERY_PARAM_SESSION_ID, session_id)
       .query_one(Server::QUERY_PARAM_FILEPATH, location.filepath)
-      .query_one(Server::QUERY_PARAM_LINE, location.line)
-      .query_one(Server::QUERY_PARAM_CHARACTER, location.character)
+      .query_one(Server::QUERY_PARAM_LINE, location.position.line)
+      .query_one(Server::QUERY_PARAM_CHARACTER, location.position.character)
       .send()
       .await?
       .check_status()

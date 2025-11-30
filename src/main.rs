@@ -6,6 +6,7 @@ mod commands;
 mod lean_server;
 mod macros;
 mod messages;
+mod open_files;
 mod server;
 mod session;
 mod session_runner;

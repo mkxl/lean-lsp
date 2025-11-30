@@ -1,53 +1,102 @@
 use std::path::PathBuf;
 
+use anyhow::{Context, Error as AnyhowError};
 use clap::Args;
 use derive_more::{Constructor, From};
+use mkutils::Utils;
 use poem_openapi::Object;
 use serde::{Deserialize, Serialize};
 use ulid::Ulid;
+
+#[derive(Deserialize, Object, Serialize)]
+pub struct PlainGoals {
+  pub goals: Vec<String>,
+  pub rendered: String,
+}
 
 #[derive(Deserialize, From, Object, Serialize)]
 pub struct TaskStatus {
   pub is_finished: bool,
 }
 
+#[derive(Constructor, Serialize)]
+pub struct BytesPosition {
+  pub line: usize,
+  pub character: usize,
+}
+
 #[derive(Args, Constructor, Deserialize, Object, Serialize)]
+pub struct Utf8Position {
+  #[arg(long)]
+  pub line: usize,
+  #[arg(long)]
+  pub character: usize,
+}
+
+#[derive(Args, Deserialize, Object, Serialize)]
 pub struct Utf8Location {
   pub filepath: PathBuf,
 
-  #[arg(long)]
-  pub line: usize,
-
-  #[arg(long)]
-  pub character: usize,
+  #[command(flatten)]
+  #[serde(flatten)]
+  #[oai(flatten)]
+  pub position: Utf8Position,
 }
 
-// No Constructor derive. UTF-16 locations can only be created from a UTF-8
-// location, or deserialized from a server message.
-#[derive(Deserialize, Serialize)]
-pub struct Utf16Location {
-  pub filepath: PathBuf,
-  pub line: usize,
-  pub character: usize,
-}
+impl Utf8Location {
+  pub fn new(filepath: PathBuf, line: usize, character: usize) -> Self {
+    let position = Utf8Position::new(line, character);
 
-impl Utf16Location {
-  pub fn new(location: Utf8Location, text: &str) -> Self {
-    let line_str = text.lines().nth(location.line).unwrap_or_default();
-    let utf16_offset = line_str.chars().take(location.character).map(char::len_utf16).sum();
-
-    Self {
-      filepath: location.filepath,
-      line: location.line,
-      character: utf16_offset,
-    }
+    Self { filepath, position }
   }
 }
 
-#[derive(Deserialize, Object, Serialize)]
-pub struct PlainGoals {
-  pub goals: Vec<String>,
-  pub rendered: String,
+#[derive(Clone, Constructor, Copy, Serialize)]
+pub struct Utf16Position {
+  pub line: usize,
+  pub character: usize,
+}
+
+impl Utf16Position {
+  pub fn from_utf8(location: &Utf8Location, text: &str) -> Result<Self, AnyhowError> {
+    let line_str = text.lines().nth(location.position.line).context("no such line")?;
+    let utf16_offset = line_str
+      .chars()
+      .take(location.position.character)
+      .map(char::len_utf16)
+      .sum();
+
+    Self {
+      line: location.position.line,
+      character: utf16_offset,
+    }
+    .ok()
+  }
+
+  pub fn into_utf8_and_bytes_positions(self, lines: &[&str]) -> Option<(Utf8Position, BytesPosition)> {
+    let line_str = lines.get(self.line)?;
+    let mut utf16_remaining = self.character;
+    let mut utf8_offset = 0;
+    let mut bytes_offset = 0;
+
+    for c in line_str.chars() {
+      let utf16_len = c.len_utf16();
+      let bytes_len = c.len_utf8();
+
+      if utf16_remaining < utf16_len {
+        break;
+      }
+
+      utf16_remaining -= utf16_len;
+      utf8_offset += 1;
+      bytes_offset += bytes_len;
+    }
+
+    let utf8_position = Utf8Position::new(self.line, utf8_offset);
+    let bytes_position = BytesPosition::new(self.line, bytes_offset);
+
+    (utf8_position, bytes_position).some()
+  }
 }
 
 #[derive(Deserialize, Object, Serialize)]

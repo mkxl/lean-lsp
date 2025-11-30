@@ -30,8 +30,9 @@ impl SessionSet {
     &self,
     lean_path: PathBuf,
     lean_server_log_dirpath: Option<PathBuf>,
+    enrich_utf16_positions: bool,
   ) -> Result<Session, AnyhowError> {
-    let command = NewSessionCommand::new(lean_path, lean_server_log_dirpath);
+    let command = NewSessionCommand::new(lean_path, lean_server_log_dirpath, enrich_utf16_positions);
 
     crate::macros::run_command!(self, SessionSetCommand::NewSession, command)
   }
