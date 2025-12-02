@@ -26,6 +26,7 @@ impl Session {
 
   pub fn new(
     lean_path: &Path,
+    lake_exe_path: Option<&Path>,
     lean_server_log_dirpath: Option<&Path>,
     enrich_utf16_positions: bool,
   ) -> Result<(Session, SessionRunner), AnyhowError> {
@@ -37,6 +38,7 @@ impl Session {
       runner_commands,
       notifications.clone(),
       lean_path,
+      lake_exe_path,
       lean_server_log_dirpath,
       enrich_utf16_positions,
     )?;

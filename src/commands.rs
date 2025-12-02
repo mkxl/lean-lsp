@@ -3,6 +3,7 @@ use std::path::PathBuf;
 use anyhow::Error as AnyhowError;
 use clap::Args;
 use derive_more::Constructor;
+use mkutils::Utils;
 use poem_openapi::Object;
 use serde::{Deserialize, Serialize};
 use tokio::sync::oneshot::Sender as OneshotSender;
@@ -53,6 +54,9 @@ pub struct NewSessionCommand {
   #[arg(default_value = Self::DEFAULT_LEAN_PATH_STR)]
   pub lean_path: PathBuf,
 
+  #[arg(long)]
+  pub lake_exe_path: Option<PathBuf>,
+
   #[arg(long = "log-dir", env = Self::LEAN_SERVER_LOG_DIRPATH_ENV_NAME)]
   pub lean_server_log_dirpath: Option<PathBuf>,
 
@@ -63,6 +67,20 @@ pub struct NewSessionCommand {
 impl NewSessionCommand {
   const DEFAULT_LEAN_PATH_STR: &'static str = ".";
   const LEAN_SERVER_LOG_DIRPATH_ENV_NAME: &'static str = LeanServer::LOG_DIRPATH_ENV_NAME;
+
+  pub fn absolute(&self) -> Result<Self, AnyhowError> {
+    Self {
+      lean_path: std::path::absolute(&self.lean_path)?,
+      lake_exe_path: self.lake_exe_path.as_ref().map(std::path::absolute).transpose()?,
+      lean_server_log_dirpath: self
+        .lean_server_log_dirpath
+        .as_ref()
+        .map(std::path::absolute)
+        .transpose()?,
+      enrich_utf16_positions: self.enrich_utf16_positions,
+    }
+    .ok()
+  }
 }
 
 #[derive(Args, Constructor, Deserialize, Object, Serialize)]

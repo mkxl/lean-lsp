@@ -84,12 +84,13 @@ impl SessionRunner {
     commands: MpscUnboundedReceiver<SessionCommand>,
     notifications: BroadcastSender<Json>,
     lean_path: &Path,
+    lake_exe_path: Option<&Path>,
     lean_server_log_dirpath: Option<&Path>,
     enrich_utf16_positions: bool,
   ) -> Result<Self, AnyhowError> {
     let commands = commands.into_stream();
     let project_dirpath = Self::project_dirpath(lean_path)?;
-    let lean_server = LeanServer::new(&project_dirpath, lean_server_log_dirpath)?;
+    let lean_server = LeanServer::new(&project_dirpath, lake_exe_path, lean_server_log_dirpath)?;
     let requests = HashMap::default();
     let open_files = OpenFiles::default();
     let (kill_event_sender, kill_event_receiver) = Event::new();

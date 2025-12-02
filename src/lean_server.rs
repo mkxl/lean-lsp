@@ -80,13 +80,15 @@ impl LeanServerProcess {
 
   pub fn new(
     project_dirpath: &Path,
+    lake_exe_path: Option<&Path>,
     log_dirpath: Option<&Path>,
     inputs: MpscUnboundedReceiver<Vec<u8>>,
     outputs: MpscUnboundedSender<BytesMut>,
     kill_event: EventReceiver,
   ) -> Result<Self, AnyhowError> {
     let inputs = inputs.into_stream();
-    let (child, stdin, stdout, stderr) = Self::process(&project_dirpath.absolute()?, log_dirpath)?.into_parts();
+    let (child, stdin, stdout, stderr) =
+      Self::process(&project_dirpath.absolute()?, lake_exe_path, log_dirpath)?.into_parts();
     let stdout = LeanServerStdout::new(stdout);
     let stderr = stderr.buf_reader_async().lines().into_stream();
     let lean_server = Self {
@@ -102,9 +104,15 @@ impl LeanServerProcess {
     lean_server.ok()
   }
 
-  fn process(project_dirpath: &Path, log_dirpath: Option<&Path>) -> Result<Process, AnyhowError> {
+  fn process(
+    project_dirpath: &Path,
+    lake_exe_path: Option<&Path>,
+    log_dirpath: Option<&Path>,
+  ) -> Result<Process, AnyhowError> {
+    let default_lake_exe_path = PathBuf::from("lake");
+    let lake_exe_path = lake_exe_path.unwrap_or(&default_lake_exe_path);
     let env = log_dirpath.map(|log_dirpath| Self::LOG_DIRPATH_ENV_NAME.pair(log_dirpath));
-    let process = Process::new("lake", ["serve"], env, project_dirpath.some())?;
+    let process = Process::new(lake_exe_path, ["serve"], env, project_dirpath.some())?;
 
     process.ok()
   }
@@ -146,7 +154,11 @@ pub struct LeanServer {
 impl LeanServer {
   pub const LOG_DIRPATH_ENV_NAME: &'static str = LeanServerProcess::LOG_DIRPATH_ENV_NAME;
 
-  pub fn new(project_dirpath: &Path, log_dirpath: Option<&Path>) -> Result<Self, AnyhowError> {
+  pub fn new(
+    project_dirpath: &Path,
+    lake_exe_path: Option<&Path>,
+    log_dirpath: Option<&Path>,
+  ) -> Result<Self, AnyhowError> {
     // NOTE-97a211
     let project_dirpath = project_dirpath.absolute()?.into_owned();
     let (inputs, process_inputs) = tokio::sync::mpsc::unbounded_channel();
@@ -155,6 +167,7 @@ impl LeanServer {
     let (kill_event, process_kill_event) = Event::new();
     let process_handle = LeanServerProcess::new(
       &project_dirpath,
+      lake_exe_path,
       log_dirpath,
       process_inputs,
       process_outputs,

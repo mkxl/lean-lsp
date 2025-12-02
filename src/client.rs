@@ -43,7 +43,7 @@ impl Client {
     self
       .http_client
       .post(url)
-      .json(command)
+      .json(&command.absolute()?)
       .send()
       .await?
       .check_status()

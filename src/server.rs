@@ -122,6 +122,7 @@ impl Server {
       .session_set
       .new_session(
         command.lean_path,
+        command.lake_exe_path,
         command.lean_server_log_dirpath,
         command.enrich_utf16_positions,
       )

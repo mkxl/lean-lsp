@@ -38,10 +38,11 @@ impl SessionSetRunner {
   fn new_session(
     &mut self,
     lean_path: &Path,
+    lake_exe_path: Option<&Path>,
     lean_server_log_dirpath: Option<&Path>,
     enrich_utf16_positions: bool,
   ) -> Result<Session, AnyhowError> {
-    let (session, session_runner) = Session::new(lean_path, lean_server_log_dirpath, enrich_utf16_positions)?;
+    let (session, session_runner) = Session::new(lean_path, lake_exe_path, lean_server_log_dirpath, enrich_utf16_positions)?;
 
     self.sessions.insert(session.id(), session.clone());
     self.session_results.spawn(session_runner.run());
@@ -76,6 +77,7 @@ impl SessionSetRunner {
       SessionSetCommand::NewSession { sender, command } => self
         .new_session(
           command.lean_path.as_ref(),
+          command.lake_exe_path.map_as_ref(),
           command.lean_server_log_dirpath.map_as_ref(),
           command.enrich_utf16_positions,
         )
