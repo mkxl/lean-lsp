@@ -42,6 +42,8 @@
           };
 
           RUSTFLAGS = "--cfg tokio_unstable --cfg tracing_unstable";
+
+          nativeBuildInputs = [ pkgs.perl ];
         };
 
         devShells.default = pkgs.mkShell {
