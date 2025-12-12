@@ -44,15 +44,11 @@
           RUSTFLAGS = "--cfg tokio_unstable --cfg tracing_unstable";
 
           nativeBuildInputs = [ pkgs.pkg-config ];
-          buildInputs = [ pkgs.openssl ];
         };
 
         devShells.default = pkgs.mkShell {
-          LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath [ pkgs.openssl ];
-
           packages = [
             pkgs.pkg-config
-            pkgs.openssl
             pkgs.cargo-watch
             pkgs.tokio-console
 

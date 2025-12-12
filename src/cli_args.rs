@@ -1,205 +1,19 @@
-use std::io::StdoutLock;
+use std::io::Error as IoError;
 
 use anyhow::Error as AnyhowError;
-use clap::{Args, Parser, Subcommand};
-use futures::StreamExt;
-use mkutils::{Tracing, Utils};
+use clap::Parser;
+use futures::SinkExt;
+use mkutils::{Socket, Tracing, Utils};
+use serde_json::Value as Json;
 use tracing_subscriber::filter::LevelFilter;
-use ulid::Ulid;
 
 use crate::{
-  client::Client,
-  commands::{ChangeFileCommand, CloseFileCommand, HoverFileCommand, NewSessionCommand, OpenFileCommand},
+  commands::{
+    Command, FileCommand, GetCommand, InfoViewCommand, KillCommand, ListCommand, NewSessionCommand,
+    NotificationsCommand,
+  },
   server::Server,
-  types::Utf8Location,
 };
-
-#[derive(Args)]
-struct Get {
-  #[arg(long, default_value_t = Server::DEFAULT_PORT)]
-  port: u16,
-  session_id: Option<Ulid>,
-}
-
-impl Get {
-  async fn run(self) -> Result<(), AnyhowError> {
-    Client::new(self.port)?
-      .get(self.session_id)
-      .await?
-      .sessions
-      .to_json_str()?
-      .println()
-      .ok()
-  }
-}
-
-#[derive(Args)]
-struct List {
-  #[arg(long, default_value_t = Server::DEFAULT_PORT)]
-  port: u16,
-}
-
-impl List {
-  async fn run(self) -> Result<(), AnyhowError> {
-    for session_status in Client::new(self.port)?.get(None).await?.sessions {
-      session_status.id.println();
-    }
-
-    ().ok()
-  }
-}
-
-#[derive(Args)]
-struct New {
-  #[arg(long, default_value_t = Server::DEFAULT_PORT)]
-  port: u16,
-  #[command(flatten)]
-  command: NewSessionCommand,
-}
-
-impl New {
-  async fn run(self) -> Result<(), AnyhowError> {
-    Client::new(self.port)?
-      .new_session(&self.command)
-      .await?
-      .session_id
-      .println()
-      .ok()
-  }
-}
-
-#[derive(Args)]
-struct File {
-  #[arg(long, default_value_t = Server::DEFAULT_PORT)]
-  port: u16,
-  #[command(subcommand)]
-  command: FileCommand,
-}
-
-impl File {
-  async fn run(self) -> Result<(), AnyhowError> {
-    let client = Client::new(self.port)?;
-
-    match self.command {
-      FileCommand::Open(open_command) => client.open_file(&open_command).await?.ok(),
-      FileCommand::Change(change_command) => client.change_file(change_command).await?.ok(),
-      FileCommand::Close(close_command) => client.close_file(&close_command).await?.ok(),
-      FileCommand::Hover(hover_command) => client.hover_file(&hover_command).await?.to_json_str()?.println().ok(),
-    }
-  }
-}
-
-#[derive(Subcommand)]
-enum FileCommand {
-  Open(OpenFileCommand),
-  Hover(HoverFileCommand),
-  Change(ChangeFileCommand),
-  Close(CloseFileCommand),
-}
-
-#[derive(Args)]
-struct Notifications {
-  #[arg(long, default_value_t = Server::DEFAULT_PORT)]
-  port: u16,
-  #[arg(long)]
-  session_id: Option<Ulid>,
-
-  #[arg(long = "method")]
-  methods: Vec<String>,
-}
-
-impl Notifications {
-  async fn run(self) -> Result<(), AnyhowError> {
-    let client = Client::new(self.port)?;
-    let mut notifications = client.notifications(self.session_id, &self.methods).await?;
-
-    while let Some(notification_res) = notifications.next().await {
-      notification_res?.to_json_str()?.println();
-    }
-
-    ().ok()
-  }
-}
-
-#[derive(Args)]
-struct Serve {
-  #[arg(long, default_value_t = Server::DEFAULT_PORT)]
-  port: u16,
-}
-
-impl Serve {
-  async fn run(self) -> Result<(), AnyhowError> {
-    Server::serve(self.port).await
-  }
-}
-
-#[derive(Subcommand)]
-enum InfoViewCommand {
-  GetPlainGoals(Utf8Location),
-}
-
-#[derive(Args)]
-struct InfoView {
-  #[arg(long, default_value_t = Server::DEFAULT_PORT)]
-  port: u16,
-
-  #[arg(long)]
-  session_id: Option<Ulid>,
-
-  #[command(subcommand)]
-  command: InfoViewCommand,
-}
-
-impl InfoView {
-  async fn run(self) -> Result<(), AnyhowError> {
-    match self.command {
-      InfoViewCommand::GetPlainGoals(command) => Client::new(self.port)?
-        .get_plain_goals(self.session_id, command)
-        .await?
-        .to_json_str()?
-        .println()
-        .ok(),
-    }
-  }
-}
-
-#[derive(Args)]
-struct Status {
-  #[arg(long, default_value_t = Server::DEFAULT_PORT)]
-  port: u16,
-}
-
-impl Status {
-  async fn run(self) -> Result<(), AnyhowError> {
-    Client::new(self.port)?.status().await?.to_json_str()?.println().ok()
-  }
-}
-
-#[derive(Args)]
-struct Kill {
-  #[arg(long, default_value_t = Server::DEFAULT_PORT)]
-  port: u16,
-  session_id: Option<Ulid>,
-}
-
-impl Kill {
-  async fn run(self) -> Result<(), AnyhowError> {
-    Client::new(self.port)?.kill(self.session_id).await?.ok()
-  }
-}
-
-#[derive(Subcommand)]
-enum Command {
-  Get(Get),
-  List(List),
-  New(New),
-  File(File),
-  Notifications(Notifications),
-  Serve(Serve),
-  InfoView(InfoView),
-  Status(Status),
-  Kill(Kill),
-}
 
 #[derive(Parser)]
 pub struct CliArgs {
@@ -220,11 +34,7 @@ pub struct CliArgs {
 }
 
 impl CliArgs {
-  const LOG_LEVEL_ENV_NAME: &'static str = "LOG_LEVEL";
-
-  fn log_writer() -> StdoutLock<'static> {
-    std::io::stdout().lock()
-  }
+  const LOG_LEVEL_ENV_NAME: &str = "LOG_LEVEL";
 
   fn init_tracing(&self) {
     Tracing::default()
@@ -232,23 +42,98 @@ impl CliArgs {
       .with_json_enabled(!self.tracing_json_disabled)
       .with_tokio_console_port(self.tracing_tokio_console_port)
       .with_tokio_console_enabled(self.tracing_tokio_console_enabled)
-      .with_writer(Self::log_writer)
+      .with_stderr_lock_writer()
       .init();
+  }
+
+  async fn socket() -> Result<Socket, IoError> {
+    Socket::connect(Server::SOCKET_FILEPATH_STR.as_ref()).await
+  }
+
+  async fn file(file_command: FileCommand) -> Result<(), AnyhowError> {
+    let mut socket = Self::socket().await?;
+
+    match file_command {
+      FileCommand::Change(change_file_command) => socket.request(change_file_command).await??,
+      FileCommand::Close(close_file_command) => socket.request(close_file_command).await??,
+      FileCommand::Hover(hover_file_command) => socket.request(hover_file_command).await??.to_json_str()?.println(),
+      FileCommand::Open(open_file_command) => socket.request(open_file_command).await??,
+    }
+
+    ().ok()
+  }
+
+  async fn get(get_command: GetCommand) -> Result<(), AnyhowError> {
+    Self::socket()
+      .await?
+      .request(get_command)
+      .await??
+      .to_json_str()?
+      .println()
+      .ok()
+  }
+
+  async fn info_view(info_view_command: InfoViewCommand) -> Result<(), AnyhowError> {
+    let mut socket = Self::socket().await?;
+
+    match info_view_command {
+      InfoViewCommand::GetPlainGoals(get_plain_goals_command) => {
+        socket.request(get_plain_goals_command).await??.to_json_str()?.println();
+      }
+    }
+
+    ().ok()
+  }
+
+  async fn kill(kill_command: KillCommand) -> Result<(), AnyhowError> {
+    Self::socket().await?.request(kill_command).await??.ok()
+  }
+
+  async fn list(list_command: ListCommand) -> Result<(), AnyhowError> {
+    Self::socket()
+      .await?
+      .request(list_command)
+      .await?
+      .to_json_str()?
+      .println()
+      .ok()
+  }
+
+  async fn new_session(new_session_command: NewSessionCommand) -> Result<(), AnyhowError> {
+    Self::socket()
+      .await?
+      .request(new_session_command)
+      .await??
+      .to_json_str()?
+      .println()
+      .ok()
+  }
+
+  async fn notifications(notifications_command: NotificationsCommand) -> Result<(), AnyhowError> {
+    let mut socket = Self::socket().await?;
+    let command = notifications_command.convert::<Command>();
+
+    socket.send(command).await?;
+
+    while let Some(notification_json_res) = socket.recv::<Json>().await.into_option() {
+      notification_json_res?.to_json_str()?.println();
+    }
+
+    ().ok()
   }
 
   pub async fn run(self) -> Result<(), AnyhowError> {
     self.init_tracing();
 
     match self.command {
-      Command::Get(get) => get.run().await,
-      Command::List(list) => list.run().await,
-      Command::New(new) => new.run().await,
-      Command::File(open) => open.run().await,
-      Command::Notifications(notifications) => notifications.run().await,
-      Command::Serve(serve) => serve.run().await,
-      Command::InfoView(info_view) => info_view.run().await,
-      Command::Status(status) => status.run().await,
-      Command::Kill(kill) => kill.run().await,
+      Command::File(file_command) => Self::file(file_command).await,
+      Command::Get(get_command) => Self::get(get_command).await,
+      Command::InfoView(info_view_command) => Self::info_view(info_view_command).await,
+      Command::Kill(kill_command) => Self::kill(kill_command).await,
+      Command::List(list_command) => Self::list(list_command).await,
+      Command::New(new_session_command) => Self::new_session(new_session_command).await,
+      Command::Notifications(notifications_command) => Self::notifications(notifications_command).await,
+      Command::Serve => Server::serve().await,
     }
   }
 }

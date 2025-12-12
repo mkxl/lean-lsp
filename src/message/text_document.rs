@@ -1,6 +1,8 @@
 use serde_json::Value as Json;
 
-pub const INITIAL_TEXT_DOCUMENT_VERSION: usize = 0;
+use crate::types::{Position, Utf16};
+
+pub const INITIAL_VERSION: usize = 0;
 
 const LEAN_LANGUAGE_ID: &str = "lean4";
 
@@ -11,7 +13,7 @@ pub fn did_open_notification_params(text: &str, uri: &str) -> Json {
       "languageId": LEAN_LANGUAGE_ID,
       "text": text,
       "uri": uri,
-      "version": INITIAL_TEXT_DOCUMENT_VERSION,
+      "version": INITIAL_VERSION,
     },
   })
 }
@@ -36,15 +38,12 @@ pub fn did_close_notification_params(uri: &str) -> Json {
   })
 }
 
-pub fn hover_params(uri: &str, line: usize, character: usize) -> Json {
+pub fn hover_params(uri: &str, position: Position<Utf16>) -> Json {
   serde_json::json!({
     "textDocument": {
       "uri": uri,
     },
-    "position": {
-      "line": line,
-      "character": character,
-    },
+    "position": position,
   })
 }
 
