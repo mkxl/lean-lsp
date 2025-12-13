@@ -31,9 +31,6 @@ impl Server {
     let mut socket = unix_stream.convert::<Socket>();
     let command = socket.recv::<Command>().await.into_option().check_next()??;
 
-    // TODO: remove
-    tracing::info!(?command, "received command");
-
     match command {
       Command::File(file_command) => self.session_map.on_file_command(socket, file_command).await,
       Command::Get(get_command) => {
