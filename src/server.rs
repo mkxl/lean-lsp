@@ -1,273 +1,92 @@
-pub mod requests;
-pub mod responses;
-
-use std::{collections::HashSet, net::Ipv4Addr, path::PathBuf};
+use std::io::Error as IoError;
 
 use anyhow::Error as AnyhowError;
-use futures::{FutureExt, StreamExt};
-use mkutils::{Event, EventReceiver, EventSender, Utils};
-use poem::{
-  Body as PoemBody, EndpointExt, Error as PoemError, Route, Server as PoemServer,
-  listener::TcpListener,
-  middleware::Tracing,
-  web::websocket::{BoxWebSocketUpgraded, WebSocket},
-};
-use poem_openapi::{
-  OpenApi, OpenApiService,
-  param::Query,
-  payload::{Binary as PoemBinary, Json as PoemJson},
-};
-use tokio::task::JoinHandle;
-use ulid::Ulid;
+use mkutils::{Event, Socket, Utils};
+use tokio::net::{UnixListener, UnixStream, unix::SocketAddr};
 
 use crate::{
-  commands::{CloseFileCommand, HoverFileCommand, NewSessionCommand, OpenFileCommand},
-  server::{
-    requests::ChangeFileRequest,
-    responses::{GetPlainGoalsResponse, GetSessionsResponse, HoverFileResponse, NewSessionResponse},
-  },
-  session::Session,
-  session_set::SessionSet,
-  stream::Stream,
-  types::{SessionSetStatus, Utf8Location},
+  commands::{Command, GetCommand, KillCommand, ListCommand},
+  session_map::SessionMap,
+  types::AppError,
 };
 
+#[derive(Default)]
 pub struct Server {
-  session_set: SessionSet,
-  join_handle: JoinHandle<Result<(), AnyhowError>>,
-  kill_event_sender: EventSender,
+  session_map: SessionMap,
+  kill_event: Event,
 }
 
-#[OpenApi]
 impl Server {
-  pub const DEFAULT_PORT: u16 = 8080;
-  pub const IPV4_ADDR: Ipv4Addr = Ipv4Addr::UNSPECIFIED;
-  pub const PATH_FILE_CHANGE: &'static str = "/session/file/change";
-  pub const PATH_FILE_CLOSE: &'static str = "/session/file/close";
-  pub const PATH_FILE_HOVER: &'static str = "/session/file/hover";
-  pub const PATH_FILE_OPEN: &'static str = "/session/file/open";
-  pub const PATH_GET_NOTIFICATIONS: &'static str = "/session/notifications";
-  pub const PATH_GET_PLAIN_GOALS: &'static str = "/session/info-view/plain-goals";
-  pub const PATH_GET_SESSIONS: &'static str = "/session";
-  pub const PATH_GET_SESSION_SET_STATUS: &'static str = "/session-set/status";
-  pub const PATH_KILL: &'static str = "/";
-  pub const PATH_NEW_SESSION: &'static str = "/session/new";
-  pub const QUERY_PARAM_CHARACTER: &'static str = "character";
-  pub const QUERY_PARAM_FILEPATH: &'static str = "filepath";
-  pub const QUERY_PARAM_LINE: &'static str = "line";
-  pub const QUERY_PARAM_METHODS: &'static str = "methods";
-  pub const QUERY_PARAM_SESSION_ID: &'static str = "session_id";
+  pub const SOCKET_FILEPATH_STR: &str = "/tmp/lean-lsp.sock";
 
-  const PATH_OPEN_API: &'static str = "/openapi";
-  const PATH_ROOT: &'static str = "/";
-  const TITLE: &'static str = std::env!("CARGO_PKG_NAME");
-  const VERSION: &'static str = std::env!("CARGO_PKG_VERSION");
+  const ON_SERVE_COMMAND_ERROR_MESSAGE: &str = "lean-lsp server is already running";
 
-  fn new() -> (Self, EventReceiver) {
-    let (session_set, join_handle) = SessionSet::new();
-    let (kill_event_sender, kill_event_receiver) = Event::new();
-    let server = Self {
-      session_set,
-      join_handle,
-      kill_event_sender,
-    };
-
-    (server, kill_event_receiver)
+  fn on_serve_command() -> Result<(), AppError> {
+    anyhow::anyhow!(Self::ON_SERVE_COMMAND_ERROR_MESSAGE).err()?
   }
 
-  #[oai(path = "/session-set/status", method = "get")]
-  async fn get_session_set_status(&self) -> Result<PoemJson<SessionSetStatus>, PoemError> {
-    let session_set_status = self.join_handle.is_finished().into();
-    let session_statuses = self
-      .session_set
-      .get_sessions()
-      .await?
-      .iter()
-      .map(Session::status)
-      .try_join_all()
-      .await?;
+  #[tracing::instrument(skip_all, err)]
+  async fn on_unix_stream(&mut self, pair_res: Result<(UnixStream, SocketAddr), IoError>) -> Result<(), AnyhowError> {
+    let (unix_stream, _socket_addr) = pair_res?;
+    let mut socket = unix_stream.convert::<Socket>();
+    let command = socket.recv::<Command>().await.into_option().check_next()??;
 
-    SessionSetStatus::new(session_set_status, session_statuses)
-      .poem_json()
-      .ok()
-  }
-
-  #[oai(path = "/session", method = "get")]
-  async fn get_sessions(
-    &self,
-    Query(session_id): Query<Option<Ulid>>,
-  ) -> Result<PoemJson<GetSessionsResponse>, PoemError> {
-    let sessions = if session_id.is_some() {
-      self.session_set.get_session(session_id).await?.once().collect()
-    } else {
-      self.session_set.get_sessions().await?
-    };
-
-    sessions
-      .iter()
-      .map(Session::status)
-      .try_join_all()
-      .await?
-      .convert::<GetSessionsResponse>()
-      .poem_json()
-      .ok()
-  }
-
-  #[oai(path = "/session/new", method = "post")]
-  async fn new_session(
-    &self,
-    PoemJson(command): PoemJson<NewSessionCommand>,
-  ) -> Result<PoemJson<NewSessionResponse>, PoemError> {
-    let session = self
-      .session_set
-      .new_session(
-        command.lean_path,
-        command.lean_server_log_dirpath,
-        command.enrich_utf16_positions,
-      )
-      .await?;
-
-    session.initialize().await?;
-
-    session.id().convert::<NewSessionResponse>().poem_json().ok()
-  }
-
-  #[oai(path = "/session/file/open", method = "post")]
-  async fn open_file(&self, PoemJson(command): PoemJson<OpenFileCommand>) -> Result<PoemJson<()>, PoemError> {
-    self
-      .session_set
-      .get_session(command.session_id)
-      .await?
-      .open_file(command.lean_filepath)
-      .await?
-      .poem_json()
-      .ok()
-  }
-
-  #[oai(path = "/session/file/change", method = "post")]
-  async fn change_file(&self, PoemJson(command): PoemJson<ChangeFileRequest>) -> Result<PoemJson<()>, PoemError> {
-    self
-      .session_set
-      .get_session(command.session_id)
-      .await?
-      .change_file(command.lean_filepath, command.text)
-      .await?
-      .poem_json()
-      .ok()
-  }
-
-  #[oai(path = "/session/file/close", method = "post")]
-  async fn close_file(&self, PoemJson(command): PoemJson<CloseFileCommand>) -> Result<PoemJson<()>, PoemError> {
-    self
-      .session_set
-      .get_session(command.session_id)
-      .await?
-      .close_file(command.lean_filepath)
-      .await?
-      .poem_json()
-      .ok()
-  }
-
-  #[oai(path = "/session/file/hover", method = "post")]
-  async fn hover_file(
-    &self,
-    PoemJson(command): PoemJson<HoverFileCommand>,
-  ) -> Result<PoemJson<HoverFileResponse>, PoemError> {
-    self
-      .session_set
-      .get_session(command.session_id)
-      .await?
-      .hover_file(command.location)
-      .await?
-      .poem_json()
-      .ok()
-  }
-
-  #[oai(path = "/session/notifications", method = "get")]
-  async fn notifications(
-    &self,
-    Query(session_id): Query<Option<Ulid>>,
-    Query(methods): Query<HashSet<String>>,
-  ) -> Result<PoemBinary<PoemBody>, PoemError> {
-    self
-      .session_set
-      .get_session(session_id)
-      .await?
-      .notifications()
-      .filter_sync(move |notification_json_res| {
-        !mkutils::when! {
-          !methods.is_empty()
-            && let Ok(notification_json) = notification_json_res
-            && let Some(method_json) = notification_json.get("method")
-            && let Some(method) = method_json.as_str()
-            && !methods.contains(method)
-        }
-      })
-      .map(|notification_json_res| {
-        notification_json_res?
-          .to_json_byte_str()?
-          .pushed(b'\n')
-          .ok::<AnyhowError>()
-      })
-      .map(Utils::io_result)
-      .poem_stream_body()
-      .ok()
-  }
-
-  #[oai(path = "/session/info-view/plain-goals", method = "get")]
-  async fn get_plain_goals(
-    &self,
-    Query(session_id): Query<Option<Ulid>>,
-    Query(filepath): Query<PathBuf>,
-    Query(line): Query<usize>,
-    Query(character): Query<usize>,
-  ) -> Result<PoemJson<GetPlainGoalsResponse>, PoemError> {
-    let location = Utf8Location::new(filepath, line, character);
-    let response = self
-      .session_set
-      .get_session(session_id)
-      .await?
-      .get_plain_goals(location)
-      .await?
-      .poem_json();
-
-    response.ok()
-  }
-
-  #[allow(clippy::unused_async)]
-  #[oai(path = "/stream", method = "get")]
-  async fn stream(&self, web_socket: WebSocket) -> BoxWebSocketUpgraded {
-    let session_set = self.session_set.clone();
-    let web_socket_upgraded =
-      web_socket.on_upgrade(|web_socket_stream| Stream::new(session_set, web_socket_stream).run());
-
-    web_socket_upgraded.boxed()
-  }
-
-  #[oai(path = "/", method = "delete")]
-  async fn kill(&self, Query(session_id): Query<Option<Ulid>>) -> Result<PoemJson<()>, PoemError> {
-    if session_id.is_some() {
-      self.session_set.get_session(session_id).await?.kill().await?;
-    } else {
-      self.session_set.kill().await?;
-      self.kill_event_sender.set();
+    match command {
+      Command::File(file_command) => self.session_map.on_file_command(socket, file_command).await,
+      Command::Get(get_command) => {
+        self
+          .session_map
+          .on_get_command(&get_command)
+          .respond_to::<GetCommand>(socket)
+          .await
+      }
+      Command::InfoView(info_view_command) => self.session_map.on_info_view_command(socket, &info_view_command).await,
+      Command::Kill(kill_command) => {
+        self
+          .session_map
+          .on_kill_command(&self.kill_event, &kill_command)
+          .await
+          .respond_to::<KillCommand>(socket)
+          .await
+      }
+      Command::List(_list_command) => {
+        self
+          .session_map
+          .on_list_command()
+          .respond_to::<ListCommand>(socket)
+          .await
+      }
+      Command::New(new_session_command) => {
+        self
+          .session_map
+          .on_new_session_command(socket, &new_session_command)
+          .await
+      }
+      Command::Notifications(notifications_command) => {
+        self.session_map.on_notifications_command(socket, notifications_command)
+      }
+      Command::Serve => Self::on_serve_command().send_to(socket).await,
     }
-
-    ().poem_json().ok()
   }
 
-  pub async fn serve(port: u16) -> Result<(), AnyhowError> {
-    let listener = TcpListener::bind((Self::IPV4_ADDR, port));
-    let (server, mut kill_event_receiver) = Self::new();
-    let open_api_service = OpenApiService::new(server, Self::TITLE, Self::VERSION);
-    let open_api_endpoint = open_api_service.spec_yaml().into_endpoint();
-    let endpoint = Route::new()
-      .nest(Self::PATH_ROOT, open_api_service)
-      .nest(Self::PATH_OPEN_API, open_api_endpoint)
-      .with(Tracing);
-    let run_future = PoemServer::new(listener).run(endpoint);
-    let kill_future = kill_event_receiver.wait().map(Ok);
+  async fn serve_impl(mut self) -> Result<(), AnyhowError> {
+    Self::SOCKET_FILEPATH_STR.remove_file().unit();
 
-    run_future.into_select(kill_future).await?.ok()
+    let listener = UnixListener::bind(Self::SOCKET_FILEPATH_STR)?;
+
+    loop {
+      tokio::select! {
+        pair_res = listener.accept() => self.on_unix_stream(pair_res).await,
+        session_message = self.session_map.next_message() => session_message.session.on_message(session_message.message).await,
+        () = self.kill_event.wait() => return ().ok()
+      }
+      .log_if_error()
+      .unit();
+    }
+  }
+
+  #[tracing::instrument(err)]
+  pub async fn serve() -> Result<(), AnyhowError> {
+    Self::default().serve_impl().await
   }
 }

@@ -1,114 +1,151 @@
-use std::path::PathBuf;
+use std::io::Error as IoError;
 
-use anyhow::Error as AnyhowError;
-use clap::Args;
-use derive_more::Constructor;
-use poem_openapi::Object;
+use camino::Utf8PathBuf;
+use clap::{Args, Subcommand};
+use derive_more::{Constructor, From};
+use mkutils::{FromChain, Request, TypeAssoc, Utils};
 use serde::{Deserialize, Serialize};
-use tokio::sync::oneshot::Sender as OneshotSender;
 use ulid::Ulid;
 
 use crate::{
-  lean_server::LeanServer,
-  server::responses::{GetPlainGoalsResponse, HoverFileResponse},
+  lean_server_process::LeanServerProcess,
+  responses::{GetPlainGoalsResponse, HoverFileResponse},
   session::Session,
-  types::{SessionStatus, Utf8Location},
+  types::{AppError, Location, SessionInfo, Utf8},
 };
 
-pub enum SessionCommand {
-  Initialize {
-    sender: OneshotSender<()>,
-  },
-  OpenFile {
-    sender: OneshotSender<Result<(), AnyhowError>>,
-    filepath: PathBuf,
-  },
-  ChangeFile {
-    sender: OneshotSender<Result<(), AnyhowError>>,
-    filepath: PathBuf,
-    text: String,
-  },
-  CloseFile {
-    sender: OneshotSender<Result<(), AnyhowError>>,
-    filepath: PathBuf,
-  },
-  HoverFile {
-    sender: OneshotSender<HoverFileResponse>,
-    location: Utf8Location,
-  },
-  GetPlainGoals {
-    sender: OneshotSender<GetPlainGoalsResponse>,
-    location: Utf8Location,
-  },
-  GetStatus {
-    sender: OneshotSender<SessionStatus>,
-  },
-  Kill {
-    sender: OneshotSender<()>,
-  },
-}
-
-#[derive(Args, Constructor, Deserialize, Object, Serialize)]
-pub struct NewSessionCommand {
-  #[arg(default_value = Self::DEFAULT_LEAN_PATH_STR)]
-  pub lean_path: PathBuf,
-
-  #[arg(long = "log-dir", env = Self::LEAN_SERVER_LOG_DIRPATH_ENV_NAME)]
-  pub lean_server_log_dirpath: Option<PathBuf>,
-
-  #[arg(long)]
-  pub enrich_utf16_positions: bool,
-}
-
-impl NewSessionCommand {
-  const DEFAULT_LEAN_PATH_STR: &'static str = ".";
-  const LEAN_SERVER_LOG_DIRPATH_ENV_NAME: &'static str = LeanServer::LOG_DIRPATH_ENV_NAME;
-}
-
-#[derive(Args, Constructor, Deserialize, Object, Serialize)]
-pub struct OpenFileCommand {
-  #[arg(long)]
-  pub session_id: Option<Ulid>,
-  pub lean_filepath: PathBuf,
-}
-
-#[derive(Args)]
+#[derive(Args, Debug, Deserialize, Serialize, TypeAssoc)]
+#[type_assoc(impl_trait = Request, Response = Result<(), AppError>, Serialized = Command)]
 pub struct ChangeFileCommand {
   #[arg(long)]
   pub session_id: Option<Ulid>,
-  pub lean_filepath: PathBuf,
-  #[arg(long)]
-  pub input_filepath: Option<PathBuf>,
+
+  #[arg(long = "input")]
+  pub input_filepath: Utf8PathBuf,
+
+  pub filepath: Utf8PathBuf,
 }
 
-#[derive(Args, Constructor, Deserialize, Object, Serialize)]
+#[derive(Args, Constructor, Debug, Deserialize, Serialize, TypeAssoc)]
+#[type_assoc(impl_trait = Request, Response = Result<(), AppError>, Serialized = Command)]
 pub struct CloseFileCommand {
   #[arg(long)]
   pub session_id: Option<Ulid>,
-  pub lean_filepath: PathBuf,
+
+  pub filepath: Utf8PathBuf,
 }
 
-#[derive(Args, Constructor, Deserialize, Object, Serialize)]
+#[derive(Args, Constructor, Debug, Deserialize, Serialize, TypeAssoc)]
+#[type_assoc(impl_trait = Request, Response = Result<HoverFileResponse, AppError>, Serialized = Command)]
 pub struct HoverFileCommand {
   #[arg(long)]
   pub session_id: Option<Ulid>,
+
   #[command(flatten)]
-  pub location: Utf8Location,
+  pub location: Location<Utf8>,
 }
 
-pub enum SessionSetCommand {
-  NewSession {
-    sender: OneshotSender<Result<Session, AnyhowError>>,
-    command: NewSessionCommand,
-  },
-  GetSessions {
-    sender: OneshotSender<Vec<Session>>,
-  },
-  GetSession {
-    sender: OneshotSender<Result<Session, AnyhowError>>,
-    session_id: Option<Ulid>,
-  },
-  Kill {
-    sender: OneshotSender<Result<(), AnyhowError>>,
-  },
+#[derive(Args, Constructor, Debug, Deserialize, Serialize, TypeAssoc)]
+#[type_assoc(impl_trait = Request, Response = Result<(), AppError>, Serialized = Command)]
+pub struct OpenFileCommand {
+  #[arg(long)]
+  pub session_id: Option<Ulid>,
+
+  pub filepath: Utf8PathBuf,
+}
+
+#[derive(Debug, Deserialize, From, Serialize, Subcommand)]
+pub enum FileCommand {
+  Change(ChangeFileCommand),
+  Close(CloseFileCommand),
+  Hover(HoverFileCommand),
+  Open(OpenFileCommand),
+}
+
+#[derive(Args, Debug, Deserialize, Serialize, TypeAssoc)]
+#[type_assoc(impl_trait = Request, Response = Result<SessionInfo, AppError>, Serialized = Command)]
+pub struct GetCommand {
+  pub session_id: Option<Ulid>,
+}
+
+#[derive(Args, Constructor, Debug, Deserialize, Serialize, TypeAssoc)]
+#[type_assoc(impl_trait = Request, Response = Result<GetPlainGoalsResponse, AppError>, Serialized = Command)]
+pub struct GetPlainGoalsCommand {
+  #[arg(long)]
+  pub session_id: Option<Ulid>,
+
+  #[command(flatten)]
+  pub location: Location<Utf8>,
+}
+
+#[derive(Debug, Deserialize, From, Serialize, Subcommand)]
+pub enum InfoViewCommand {
+  GetPlainGoals(GetPlainGoalsCommand),
+}
+
+#[derive(Args, Debug, Deserialize, Serialize, TypeAssoc)]
+#[type_assoc(impl_trait = Request, Response = Result<(), AppError>, Serialized = Command)]
+pub struct KillCommand {
+  pub session_id: Option<Ulid>,
+}
+
+#[derive(Args, Debug, Deserialize, Serialize, TypeAssoc)]
+#[type_assoc(impl_trait = Request, Response = Vec<SessionInfo>, Serialized = Command)]
+pub struct ListCommand;
+
+#[derive(Args, Constructor, Debug, Deserialize, Serialize, TypeAssoc)]
+#[type_assoc(impl_trait = Request, Response = Result<SessionInfo, AppError>, Serialized = Command)]
+pub struct NewSessionCommand {
+  #[arg(long = "lake", default_value = LeanServerProcess::DEFAULT_LAKE_FILEPATH_STR)]
+  pub lake_filepath: Utf8PathBuf,
+
+  #[arg(long = "log-dir", env = LeanServerProcess::LOG_DIRPATH_ENV_NAME)]
+  pub lean_server_log_dirpath: Option<Utf8PathBuf>,
+
+  #[arg(long)]
+  pub enrich_utf16_positions: bool,
+
+  #[arg(value_name = "path", default_value = Session::DEFAULT_PATH_STR, value_parser = Self::absolute_path)]
+  pub absolute_path: Utf8PathBuf,
+}
+
+impl NewSessionCommand {
+  fn absolute_path(path_str: &str) -> Result<Utf8PathBuf, IoError> {
+    path_str.absolute_utf8()?.into_owned().ok()
+  }
+}
+
+#[derive(Args, Debug, Deserialize, Serialize)]
+pub struct NotificationsCommand {
+  #[arg(long)]
+  pub session_id: Option<Ulid>,
+
+  #[arg(long = "method")]
+  pub methods: Vec<String>,
+}
+
+#[derive(Debug, Deserialize, From, FromChain, Serialize, Subcommand)]
+#[from(ChangeFileCommand, FileCommand)]
+#[from(CloseFileCommand, FileCommand)]
+#[from(HoverFileCommand, FileCommand)]
+#[from(OpenFileCommand, FileCommand)]
+#[from(GetPlainGoalsCommand, InfoViewCommand)]
+pub enum Command {
+  #[command(subcommand)]
+  File(FileCommand),
+
+  Get(GetCommand),
+
+  #[command(subcommand)]
+  InfoView(InfoViewCommand),
+
+  Kill(KillCommand),
+
+  List(ListCommand),
+
+  New(NewSessionCommand),
+
+  Notifications(NotificationsCommand),
+
+  Serve,
 }

@@ -1,79 +1,71 @@
-use std::path::PathBuf;
+use std::{
+  fmt::{Debug, Display},
+  marker::PhantomData,
+};
 
 use anyhow::{Context, Error as AnyhowError};
+use camino::Utf8PathBuf;
 use clap::Args;
-use derive_more::{Constructor, From};
+use derive_more::{Constructor, Debug as DeriveMoreDebug};
 use mkutils::Utils;
-use poem_openapi::Object;
 use serde::{Deserialize, Serialize};
 use ulid::Ulid;
 
-#[derive(Deserialize, Object, Serialize)]
+#[derive(Deserialize, Serialize)]
 pub struct PlainGoals {
   pub goals: Vec<String>,
   pub rendered: String,
 }
 
-#[derive(Deserialize, From, Object, Serialize)]
-pub struct TaskStatus {
-  pub is_finished: bool,
-}
+#[derive(Clone, Copy)]
+pub struct Utf8;
 
-#[derive(Constructor, Serialize)]
-pub struct BytesPosition {
-  pub line: usize,
-  pub character: usize,
-}
+#[derive(Clone, Copy)]
+pub struct Utf16;
 
-#[derive(Args, Constructor, Deserialize, Object, Serialize)]
-pub struct Utf8Position {
+#[derive(Clone, Copy)]
+pub struct Bytes;
+
+#[derive(Args, Clone, Copy, DeriveMoreDebug, Deserialize, Serialize)]
+pub struct Position<T> {
   #[arg(long)]
   pub line: usize,
+
   #[arg(long)]
   pub character: usize,
+
+  #[arg(skip)]
+  #[debug(skip)]
+  #[serde(skip)]
+  phantom: PhantomData<T>,
 }
 
-#[derive(Args, Deserialize, Object, Serialize)]
-pub struct Utf8Location {
-  pub filepath: PathBuf,
-
-  #[command(flatten)]
-  #[serde(flatten)]
-  #[oai(flatten)]
-  pub position: Utf8Position,
-}
-
-impl Utf8Location {
-  pub fn new(filepath: PathBuf, line: usize, character: usize) -> Self {
-    let position = Utf8Position::new(line, character);
-
-    Self { filepath, position }
-  }
-}
-
-#[derive(Clone, Constructor, Copy, Serialize)]
-pub struct Utf16Position {
-  pub line: usize,
-  pub character: usize,
-}
-
-impl Utf16Position {
-  pub fn from_utf8(location: &Utf8Location, text: &str) -> Result<Self, AnyhowError> {
-    let line_str = text.lines().nth(location.position.line).context("no such line")?;
-    let utf16_offset = line_str
-      .chars()
-      .take(location.position.character)
-      .map(char::len_utf16)
-      .sum();
+impl<T> Position<T> {
+  pub const fn new(line: usize, character: usize) -> Self {
+    let phantom = PhantomData;
 
     Self {
-      line: location.position.line,
-      character: utf16_offset,
+      line,
+      character,
+      phantom,
     }
-    .ok()
+  }
+}
+
+impl Position<Utf16> {
+  pub fn from_utf8(utf8_position: Position<Utf8>, text: &str) -> Result<Self, AnyhowError> {
+    let line_str = text.lines().nth(utf8_position.line).context("no such line")?;
+    let character = line_str
+      .chars()
+      .take(utf8_position.character)
+      .map(char::len_utf16)
+      .sum();
+    let utf16_position = Self::new(utf8_position.line, character);
+
+    utf16_position.ok()
   }
 
-  pub fn into_utf8_and_bytes_positions(self, lines: &[&str]) -> Option<(Utf8Position, BytesPosition)> {
+  pub fn into_utf8_and_bytes_positions(self, lines: &[&str]) -> Option<(Position<Utf8>, Position<Bytes>)> {
     let line_str = lines.get(self.line)?;
     let mut utf16_remaining = self.character;
     let mut utf8_offset = 0;
@@ -92,22 +84,43 @@ impl Utf16Position {
       bytes_offset += bytes_len;
     }
 
-    let utf8_position = Utf8Position::new(self.line, utf8_offset);
-    let bytes_position = BytesPosition::new(self.line, bytes_offset);
+    let utf8_position = Position::<Utf8>::new(self.line, utf8_offset);
+    let bytes_position = Position::<Bytes>::new(self.line, bytes_offset);
 
     (utf8_position, bytes_position).some()
   }
 }
 
-#[derive(Deserialize, Object, Serialize)]
-pub struct SessionStatus {
-  pub id: Ulid,
-  pub process: TaskStatus,
-  pub project_dirpath: PathBuf,
+#[derive(Args, DeriveMoreDebug, Deserialize, Serialize)]
+#[serde(bound(serialize = "", deserialize = ""))]
+pub struct Location<T> {
+  pub filepath: Utf8PathBuf,
+
+  #[command(flatten)]
+  #[serde(flatten)]
+  pub position: Position<T>,
 }
 
-#[derive(Constructor, Deserialize, Object, Serialize)]
-pub struct SessionSetStatus {
-  session_set: TaskStatus,
-  sessions: Vec<SessionStatus>,
+#[derive(Constructor, Deserialize, Serialize)]
+pub struct SessionInfo {
+  pub id: Ulid,
+  pub project_dirpath: Utf8PathBuf,
+}
+
+#[derive(Constructor, Deserialize, Serialize)]
+pub struct AppError {
+  pub error: String,
+  pub details: String,
+}
+
+impl<E: Debug + Display> From<E> for AppError {
+  fn from(error: E) -> Self {
+    Self::new(error.to_string(), error.debug().to_string())
+  }
+}
+
+impl From<AppError> for AnyhowError {
+  fn from(AppError { error, details }: AppError) -> Self {
+    anyhow::anyhow!("{error} ({details})")
+  }
 }

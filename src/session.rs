@@ -1,92 +1,358 @@
-use std::path::{Path, PathBuf};
+use std::{collections::HashMap, io::Error as IoError};
 
 use anyhow::Error as AnyhowError;
-use mkutils::{IntoStream, Utils};
+use camino::{Utf8Path, Utf8PathBuf};
+use derive_more::Constructor;
+use futures::{SinkExt, StreamExt};
+use mkutils::{Socket, Utils};
 use serde_json::Value as Json;
-use tokio::sync::{broadcast::Sender as BroadcastSender, mpsc::UnboundedSender as MpscUnboundedSender};
+use tokio::{sync::broadcast::Sender as BroadcastSender, task::JoinSet};
 use tokio_stream::wrappers::BroadcastStream as BroadcastReceiverStream;
 use ulid::Ulid;
 
 use crate::{
-  commands::SessionCommand,
-  server::responses::{GetPlainGoalsResponse, HoverFileResponse},
-  session_runner::SessionRunner,
-  types::{SessionStatus, Utf8Location},
+  commands::{
+    ChangeFileCommand, CloseFileCommand, GetPlainGoalsCommand, HoverFileCommand, NewSessionCommand,
+    NotificationsCommand, OpenFileCommand,
+  },
+  lean_server_process::LeanServerProcess,
+  message::{Id, Message},
+  open_file::{OpenFile, OpenFileMap},
+  responses::{GetPlainGoalsResponse, HoverFileResponse},
+  types::{AppError, Position, SessionInfo, Utf16},
 };
 
-#[derive(Clone)]
+#[derive(Constructor)]
+pub struct SessionMessage<'a> {
+  pub session: &'a mut Session,
+  pub message: Result<Message, AnyhowError>,
+}
+
+enum Request {
+  GetPlainGoals(Socket),
+  HoverFile(Socket),
+  Initialize(Socket),
+  LeanRpcConnect,
+  TextDocumentDocumentCodeAction,
+  TextDocumentDocumentSymbol,
+  TextDocumentFoldingRange,
+}
+
 pub struct Session {
   id: Ulid,
-  commands: MpscUnboundedSender<SessionCommand>,
+  project_absolute_dirpath: Utf8PathBuf,
+  open_files: OpenFileMap,
+  lean_server_process: LeanServerProcess,
+  enrich_utf16_positions: bool,
+  requests: HashMap<Id, Request>,
   notifications: BroadcastSender<Json>,
+  join_set: JoinSet<Result<(), AnyhowError>>,
 }
 
 impl Session {
+  pub const DEFAULT_PATH_STR: &str = ".";
+
+  const MANIFEST_FILE_NAME: &str = "lake-manifest.json";
+  const MISSING_MANIFEST_ERROR_MESSAGE: &str =
+    "unable to get project dirpath: no manifest file found in ancestor directories";
   const NOTIFICATIONS_CAPACITY: usize = 32;
 
-  pub fn new(
-    lean_path: &Path,
-    lean_server_log_dirpath: Option<&Path>,
-    enrich_utf16_positions: bool,
-  ) -> Result<(Session, SessionRunner), AnyhowError> {
+  pub fn new(new_session_command: &NewSessionCommand) -> Result<Self, AnyhowError> {
     let id = Ulid::new();
-    let (commands, runner_commands) = tokio::sync::mpsc::unbounded_channel();
-    let (notifications, _notifications_receiver) = tokio::sync::broadcast::channel(Self::NOTIFICATIONS_CAPACITY);
-    let session_runner = SessionRunner::new(
-      id,
-      runner_commands,
-      notifications.clone(),
-      lean_path,
-      lean_server_log_dirpath,
-      enrich_utf16_positions,
+    let open_files = OpenFileMap::default();
+    let project_absolute_dirpath = Self::project_absolute_dirpath(&new_session_command.absolute_path)?;
+    let lean_server_process = LeanServerProcess::new(
+      &new_session_command.lake_filepath,
+      new_session_command.lean_server_log_dirpath.as_deref(),
+      &project_absolute_dirpath,
     )?;
+    let enrich_utf16_positions = new_session_command.enrich_utf16_positions;
+    let requests = HashMap::new();
+    let (notifications, _notifications_receiver) = tokio::sync::broadcast::channel(Self::NOTIFICATIONS_CAPACITY);
+    let join_set = JoinSet::new();
     let session = Self {
       id,
-      commands,
+      project_absolute_dirpath,
+      open_files,
+      lean_server_process,
+      enrich_utf16_positions,
+      requests,
       notifications,
+      join_set,
     };
-    let pair = session.pair(session_runner);
 
-    pair.ok()
+    session.ok()
   }
 
-  pub fn id(&self) -> Ulid {
+  fn project_absolute_dirpath(absolute_path: &Utf8Path) -> Result<Utf8PathBuf, AnyhowError> {
+    for ancestor_path in absolute_path.ancestors() {
+      let mut manifest_filepath = ancestor_path.join(Self::MANIFEST_FILE_NAME);
+
+      if manifest_filepath.is_file() {
+        manifest_filepath.pop();
+
+        return manifest_filepath.ok();
+      }
+    }
+
+    anyhow::bail!(Self::MISSING_MANIFEST_ERROR_MESSAGE);
+  }
+
+  pub const fn id(&self) -> Ulid {
     self.id
   }
 
-  pub async fn initialize(&self) -> Result<(), AnyhowError> {
-    crate::macros::run_command!(self, SessionCommand::Initialize).ok()
+  pub fn info(&self) -> SessionInfo {
+    SessionInfo::new(self.id, self.project_absolute_dirpath.clone())
   }
 
-  pub async fn open_file(&self, filepath: PathBuf) -> Result<(), AnyhowError> {
-    crate::macros::run_command!(self, SessionCommand::OpenFile, filepath)
+  pub async fn next_message(&mut self) -> SessionMessage<'_> {
+    let message = self.lean_server_process.next_message().await;
+
+    SessionMessage::new(self, message)
   }
 
-  pub async fn change_file(&self, filepath: PathBuf, text: String) -> Result<(), AnyhowError> {
-    crate::macros::run_command!(self, SessionCommand::ChangeFile, filepath, text)
+  fn on_notification(&self, message: Message) {
+    tracing::info!(
+      received_notification = message.json.as_valuable(),
+      "received notification"
+    );
+
+    self.notifications.send(message.json).log_if_error().unit();
   }
 
-  pub async fn close_file(&self, filepath: PathBuf) -> Result<(), AnyhowError> {
-    crate::macros::run_command!(self, SessionCommand::CloseFile, filepath)
+  fn on_get_plain_goals_response(response: Json) -> Result<GetPlainGoalsResponse, AppError> {
+    response.into_value_from_json::<GetPlainGoalsResponse>()?.ok()
   }
 
-  pub async fn hover_file(&self, location: Utf8Location) -> Result<HoverFileResponse, AnyhowError> {
-    crate::macros::run_command!(self, SessionCommand::HoverFile, location).ok()
+  fn on_hover_file_response(response: Json) -> Result<HoverFileResponse, AppError> {
+    response.into_value_from_json::<HoverFileResponse>()?.ok()
   }
 
-  pub async fn get_plain_goals(&self, location: Utf8Location) -> Result<GetPlainGoalsResponse, AnyhowError> {
-    crate::macros::run_command!(self, SessionCommand::GetPlainGoals, location).ok()
+  async fn on_initialize_response(&mut self) -> Result<SessionInfo, AppError> {
+    self.send_notification(Message::initialized_notification()).await?;
+
+    self.info().ok()
   }
 
-  pub async fn status(&self) -> Result<SessionStatus, AnyhowError> {
-    crate::macros::run_command!(self, SessionCommand::GetStatus).ok()
+  async fn on_response(&mut self, request: Request, response: Json) -> Result<(), AnyhowError> {
+    match request {
+      Request::GetPlainGoals(socket) => {
+        Self::on_get_plain_goals_response(response)
+          .respond_to::<GetPlainGoalsCommand>(socket)
+          .await?;
+      }
+      Request::HoverFile(socket) => {
+        Self::on_hover_file_response(response)
+          .respond_to::<HoverFileCommand>(socket)
+          .await?;
+      }
+      Request::Initialize(socket) => {
+        self
+          .on_initialize_response()
+          .await
+          .respond_to::<NewSessionCommand>(socket)
+          .await?;
+      }
+      Request::LeanRpcConnect
+      | Request::TextDocumentDocumentCodeAction
+      | Request::TextDocumentDocumentSymbol
+      | Request::TextDocumentFoldingRange => (),
+    }
+    .ok()
   }
 
-  pub fn notifications(&self) -> BroadcastReceiverStream<Json> {
-    self.notifications.subscribe().into_stream()
+  fn on_request(message: &Message) {
+    tracing::info!(received_request = message.json.as_valuable(), "received request");
   }
 
-  pub async fn kill(&self) -> Result<(), AnyhowError> {
-    crate::macros::run_command!(self, SessionCommand::Kill).ok()
+  pub async fn on_message(&mut self, message: Result<Message, AnyhowError>) -> Result<(), AnyhowError> {
+    let mut message = message?;
+
+    tracing::info!(id = %message.id.optional_display(), message = message.json.as_valuable(), "received message");
+
+    if self.enrich_utf16_positions {
+      self.open_files.enrich_positions(&mut message.json);
+    }
+
+    let Some(id) = &message.id else { return self.on_notification(message).ok() };
+
+    if let Some(request) = self.requests.remove(id) {
+      self.on_response(request, message.json).await
+    } else {
+      Self::on_request(&message).ok()
+    }
+  }
+
+  async fn send(&mut self, message: Message) -> Result<(), AnyhowError> {
+    self.lean_server_process.send(message).await
+  }
+
+  async fn send_request(&mut self, request: Request, message: Message) -> Result<(), AnyhowError> {
+    let Some(id) = &message.id else { anyhow::bail!("unable to send request with no id") };
+
+    if self.requests.insert(id.clone(), request).is_some() {
+      tracing::warn!(%id, "registering request with existing id");
+    }
+
+    self.send(message).await
+  }
+
+  async fn send_notification(&mut self, message: Message) -> Result<(), AnyhowError> {
+    self.send(message).await
+  }
+
+  pub async fn initialize(&mut self, socket: Socket) -> Result<(), AnyhowError> {
+    let root_uri = self.project_absolute_dirpath.to_uri()?;
+    let name = self.project_absolute_dirpath.file_name_ok()?;
+    let request = Request::Initialize(socket);
+    let message = Message::initialize_request(&self.project_absolute_dirpath, &root_uri, name);
+
+    self.send_request(request, message).await
+  }
+
+  pub async fn change_file(&mut self, change_file_command: &ChangeFileCommand) -> Result<(), AppError> {
+    let open_file = self.open_files.get_mut(&change_file_command.filepath)?;
+    let new_version = open_file.increment_version();
+    let uri = change_file_command.filepath.to_uri()?;
+    let text = change_file_command
+      .input_filepath
+      .as_path()
+      .read_to_string_async()
+      .await
+      .result?;
+    let message = Message::text_document_did_change_notification(&text, &uri, new_version);
+
+    self.send_notification(message).await?;
+
+    ().ok()
+  }
+
+  pub async fn close_file(&mut self, close_file_command: &CloseFileCommand) -> Result<(), AppError> {
+    self.open_files.check_contains(&close_file_command.filepath)?;
+
+    let uri = close_file_command.filepath.to_uri()?;
+    let message = Message::text_document_did_close_notification(&uri);
+
+    self.send_notification(message).await?;
+    self.open_files.remove(&close_file_command.filepath);
+
+    ().ok()
+  }
+
+  pub async fn hover_file(&mut self, socket: Socket, hover_file_command: &HoverFileCommand) -> Result<(), AnyhowError> {
+    let open_file = self.open_files.get(&hover_file_command.location.filepath)?;
+    let position = Position::<Utf16>::from_utf8(hover_file_command.location.position, open_file.text())?;
+    let uri = hover_file_command.location.filepath.to_uri()?;
+    let request = Request::HoverFile(socket);
+    let message = Message::text_document_hover_request(&uri, position);
+
+    self.send_request(request, message).await?;
+
+    ().ok()
+  }
+
+  pub async fn open_file(&mut self, open_file_command: OpenFileCommand) -> Result<(), AppError> {
+    self.open_files.check_doesnt_contain(&open_file_command.filepath)?;
+
+    let uri = open_file_command.filepath.to_uri()?;
+    let text = open_file_command
+      .filepath
+      .open_async()
+      .await?
+      .buf_reader_async()
+      .read_string_async()
+      .await?;
+    let open_file = OpenFile::new(text);
+    let text_document_did_open_notification_message =
+      Message::text_document_did_open_notification(open_file.text(), &uri);
+    let text_document_document_symbol_request_message = Message::text_document_document_symbol_request(&uri);
+    let text_document_document_code_action_request_message = Message::text_document_document_code_action_request(&uri);
+    let text_document_folding_range_request_message = Message::text_document_folding_range_request(&uri);
+    let lean_rpc_connect_request_message = Message::lean_rpc_connect_request(&uri);
+
+    self
+      .send_notification(text_document_did_open_notification_message)
+      .await?;
+    self
+      .send_request(
+        Request::TextDocumentDocumentSymbol,
+        text_document_document_symbol_request_message,
+      )
+      .await?;
+    self
+      .send_request(
+        Request::TextDocumentDocumentCodeAction,
+        text_document_document_code_action_request_message,
+      )
+      .await?;
+    self
+      .send_request(
+        Request::TextDocumentFoldingRange,
+        text_document_folding_range_request_message,
+      )
+      .await?;
+    self
+      .send_request(Request::LeanRpcConnect, lean_rpc_connect_request_message)
+      .await?;
+
+    self.open_files.insert(open_file_command.filepath, open_file);
+
+    ().ok()
+  }
+
+  pub async fn get_plain_goals(
+    &mut self,
+    socket: Socket,
+    get_plain_goals_command: &GetPlainGoalsCommand,
+  ) -> Result<(), AnyhowError> {
+    let open_file = self.open_files.get(&get_plain_goals_command.location.filepath)?;
+    let position = Position::<Utf16>::from_utf8(get_plain_goals_command.location.position, open_file.text())?;
+    let uri = get_plain_goals_command.location.filepath.to_uri()?;
+    let request = Request::GetPlainGoals(socket);
+    let message = Message::lean_rpc_get_plain_goals_request(&uri, position);
+
+    self.send_request(request, message).await?;
+
+    ().ok()
+  }
+
+  pub async fn kill(&mut self) -> Result<(), IoError> {
+    self.lean_server_process.kill().await?;
+    self.join_set.abort_all();
+
+    ().ok()
+  }
+
+  #[tracing::instrument(skip_all, err)]
+  async fn notify_impl(
+    mut socket: Socket,
+    notifications_command: NotificationsCommand,
+    mut notifications_stream: BroadcastReceiverStream<Json>,
+  ) -> Result<(), AnyhowError> {
+    while let Some(notification_json_res) = notifications_stream.next().await {
+      let notification_json = notification_json_res?;
+
+      if !mkutils::when! {
+        !notifications_command.methods.is_empty()
+          && let Some(method_json) = notification_json.get("method")
+          && let Some(method) = method_json.as_str()
+          && !notifications_command.methods.contains_eq(method)
+      } {
+        socket.send(notification_json).await?;
+      }
+    }
+
+    ().ok()
+  }
+
+  pub fn notify(&mut self, socket: Socket, notifications_command: NotificationsCommand) {
+    let notify_future = Self::notify_impl(
+      socket,
+      notifications_command,
+      self.notifications.subscribe().into_stream(),
+    );
+
+    self.join_set.spawn(notify_future);
   }
 }

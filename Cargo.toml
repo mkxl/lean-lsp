@@ -2,29 +2,38 @@
 name = "lean-lsp"
 version = "0.1.0"
 edition = "2024"
+description = "lean-lsp"
+readme = "README.md"
+repository = "https://github.com/mkxl/lean-lsp.git"
+license = "Apache-2.0"
+keywords = ["lean", "lsp"]
+categories = ["mathematics"]
+
 
 [dependencies]
 anyhow = "1.0.100"
-bytes = "1.10.1"
-clap = { version = "4.5.48", features = ["derive", "env"] }
-console-subscriber = "0.4.1"
-derive_more = { version = "2.0.1", features = ["constructor", "display", "from"] }
+bytes = "1.11.0"
+camino = { version = "1.2.1", features = ["serde1"] }
+clap = { version = "4.5.53", features = ["derive", "env", "string"] }
+derive_more = { version = "2.0.1", features = ["constructor", "debug", "display", "from"] }
 futures = "0.3.31"
-mkutils = { version = "0.1.0", git = "https://github.com/mkxl/mkutils-rs", rev = "b0cd45653e4226ed34ecfd776bc4d9b075b5703d" }
-poem = { git = "https://github.com/poem-web/poem", version = "3.1.12", features = ["anyhow", "websocket"], branch = "master" }
-poem-openapi = { git = "https://github.com/poem-web/poem", version = "5.1.16", features = ["ulid", "websocket"], branch = "master" }
-reqwest = { version = "0.12.23", features = ["json", "stream"] }
-serde = { version = "1.0.226", features = ["derive"] }
+mkutils = { git = "https://github.com/mkxl/mkutils-rs", rev = "0b6bdff033a6cafaf362bcc18fb748971aac1167", version = "0.1.0", features = ["nightly"] }
+serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.145"
-strum = { version = "0.27.2", features = ["derive"] }
-tokio = { version = "1.47.1", features = ["macros", "rt-multi-thread", "process"] }
+tokio = { version = "1.48.0", features = ["macros", "process", "rt-multi-thread"] }
 tokio-stream = "0.1.17"
 tokio-util = "0.7.17"
-tracing = { version = "0.1.41", features = ["valuable"] }
-tracing-subscriber = { version = "0.3.20", features = ["json", "valuable"] }
+tracing = "0.1.43"
+tracing-subscriber = { version = "0.3.22", features = ["json", "valuable"] }
 ulid = { version = "1.2.1", features = ["serde"] }
-valuable = "0.1.1"
+
 
 [lints.clippy]
-pedantic = { level = "deny", priority = -1 }
-unit_arg = "allow"
+all = "deny"
+cargo = "deny"
+nursery = "deny"
+pedantic = "deny"
+duplicated_attributes = { level = "allow", priority = 1 }
+multiple_crate_versions = { level = "allow", priority = 1 }
+unit_arg = { level = "allow", priority = 1 }
+option_if_let_else = { level = "allow", priority = 1 }

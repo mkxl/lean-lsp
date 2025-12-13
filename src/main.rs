@@ -1,18 +1,14 @@
 #![recursion_limit = "256"]
 
 mod cli_args;
-mod client;
 mod commands;
-mod lean_server;
-mod macros;
-mod messages;
-mod open_files;
+mod lean_server_process;
+mod message;
+mod open_file;
+mod responses;
 mod server;
 mod session;
-mod session_runner;
-mod session_set;
-mod session_set_runner;
-mod stream;
+mod session_map;
 mod types;
 
 use anyhow::Error as AnyhowError;
