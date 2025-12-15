@@ -3,7 +3,7 @@ use std::io::Error as IoError;
 use camino::Utf8PathBuf;
 use clap::{Args, Subcommand};
 use derive_more::{Constructor, From};
-use mkutils::{FromChain, Request, TypeAssoc, Utils};
+use mkutils::{FromChain, PointU16, Request, Screen, TypeAssoc, Utils};
 use serde::{Deserialize, Serialize};
 use ulid::Ulid;
 
@@ -115,13 +115,24 @@ impl NewSessionCommand {
   }
 }
 
-#[derive(Args, Debug, Deserialize, Serialize)]
+#[derive(Args, Debug, Deserialize, Serialize, TypeAssoc)]
+#[type_assoc(impl_trait = Request, Serialized = Command)]
 pub struct NotificationsCommand {
   #[arg(long)]
   pub session_id: Option<Ulid>,
 
   #[arg(long = "method")]
   pub methods: Vec<String>,
+}
+
+#[derive(Args, Debug, Deserialize, Serialize, TypeAssoc)]
+#[type_assoc(impl_trait = Request, Serialized = Command)]
+pub struct TuiCommand {
+  #[arg(long)]
+  pub session_id: Option<Ulid>,
+
+  #[arg(skip = Screen::size().unwrap())]
+  pub size: PointU16,
 }
 
 #[derive(Debug, Deserialize, From, FromChain, Serialize, Subcommand)]
@@ -148,4 +159,6 @@ pub enum Command {
   Notifications(NotificationsCommand),
 
   Serve,
+
+  Tui(TuiCommand),
 }
