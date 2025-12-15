@@ -72,7 +72,7 @@ impl Tui {
     match crossterm_event {
       CrosstermEvent::Resize(num_cols, num_rows) => self.terminal.resize(num_cols, num_rows)?.into(),
       CrosstermEvent::Key(_key_event) => Output::EndOk,
-      ignored_event => tracing::warn!(?ignored_event, tui_id = %self.id).into(),
+      _ignored_event => ().into(),
     }
   }
 

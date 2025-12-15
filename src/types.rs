@@ -101,6 +101,31 @@ pub struct Location<T> {
   pub position: Position<T>,
 }
 
+#[derive(Clone, Deserialize, Serialize)]
+#[serde(bound(serialize = "", deserialize = ""))]
+pub struct Range<T> {
+  start: Position<T>,
+  end: Position<T>,
+}
+
+#[derive(Clone, Deserialize, Serialize)]
+pub struct Processing {
+  kind: u8,
+  range: Range<Utf16>,
+}
+
+#[derive(Clone, Deserialize, Serialize)]
+pub struct TextDocument {
+  uri: String,
+  version: usize,
+}
+
+#[derive(Clone, Deserialize, Serialize)]
+pub struct Diagnostic {
+  severity: u8,
+  range: Range<Utf16>,
+}
+
 #[derive(Constructor, Deserialize, Serialize)]
 pub struct SessionInfo {
   pub id: Ulid,
