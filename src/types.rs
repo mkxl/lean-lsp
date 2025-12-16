@@ -17,13 +17,13 @@ pub struct PlainGoals {
   pub rendered: String,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Deserialize, Serialize)]
 pub struct Utf8;
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Deserialize, Serialize)]
 pub struct Utf16;
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Deserialize, Serialize)]
 pub struct Bytes;
 
 #[derive(Args, Clone, Copy, DeriveMoreDebug, Deserialize, Serialize)]
@@ -92,7 +92,6 @@ impl Position<Utf16> {
 }
 
 #[derive(Args, DeriveMoreDebug, Deserialize, Serialize)]
-#[serde(bound(serialize = "", deserialize = ""))]
 pub struct Location<T> {
   pub filepath: Utf8PathBuf,
 
@@ -102,7 +101,6 @@ pub struct Location<T> {
 }
 
 #[derive(Clone, Deserialize, Serialize)]
-#[serde(bound(serialize = "", deserialize = ""))]
 pub struct Range<T> {
   start: Position<T>,
   end: Position<T>,
