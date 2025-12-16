@@ -29,7 +29,6 @@ impl LeanServerProcessStdout {
   }
 
   // NOTE: [https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#headerPart]
-  #[tracing::instrument(skip_all)]
   async fn next_message(&mut self) -> Result<BytesMut, AnyhowError> {
     let (content_begin_idx, content_length) = loop {
       if let Some((separator_begin_idx, separator_end_idx)) = self.buf.substr_interval(Self::SEPARATOR) {

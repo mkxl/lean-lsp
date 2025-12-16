@@ -1,4 +1,4 @@
-use std::io::Error as IoError;
+use std::{io::Error as IoError, time::Duration};
 
 use anyhow::Error as AnyhowError;
 use mkutils::{Event, Socket, Utils};
@@ -7,12 +7,14 @@ use tokio::net::{UnixListener, UnixStream, unix::SocketAddr};
 use crate::{
   commands::{Command, GetCommand, KillCommand, ListCommand},
   session_map::SessionMap,
+  tui::TuiMap,
   types::AppError,
 };
 
 #[derive(Default)]
 pub struct Server {
   session_map: SessionMap,
+  tui_map: TuiMap,
   kill_event: Event,
 }
 
@@ -20,6 +22,7 @@ impl Server {
   pub const SOCKET_FILEPATH_STR: &str = "/tmp/lean-lsp.sock";
 
   const ON_SERVE_COMMAND_ERROR_MESSAGE: &str = "lean-lsp server is already running";
+  const RENDER_PERIOD_DURATION: Duration = Duration::from_millis(20);
 
   fn on_serve_command() -> Result<(), AppError> {
     anyhow::anyhow!(Self::ON_SERVE_COMMAND_ERROR_MESSAGE).err()?
@@ -66,6 +69,7 @@ impl Server {
         self.session_map.on_notifications_command(socket, notifications_command)
       }
       Command::Serve => Self::on_serve_command().send_to(socket).await,
+      Command::Tui(tui_command) => self.tui_map.on_tui_command(&self.session_map, socket, &tui_command),
     }
   }
 
@@ -73,11 +77,14 @@ impl Server {
     Self::SOCKET_FILEPATH_STR.remove_file().unit();
 
     let listener = UnixListener::bind(Self::SOCKET_FILEPATH_STR)?;
+    let mut render_interval = tokio::time::interval(Self::RENDER_PERIOD_DURATION);
 
     loop {
       tokio::select! {
         pair_res = listener.accept() => self.on_unix_stream(pair_res).await,
         session_message = self.session_map.next_message() => session_message.session.on_message(session_message.message).await,
+        tui_event = self.tui_map.next_event() => self.tui_map.on_tui_event(tui_event).await,
+        _instant = render_interval.tick() => self.tui_map.render().await,
         () = self.kill_event.wait() => return ().ok()
       }
       .log_if_error()

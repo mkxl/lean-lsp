@@ -1,4 +1,4 @@
-use std::{borrow::Borrow, collections::HashMap, io::Error as IoError};
+use std::{borrow::Borrow, collections::HashMap};
 
 use anyhow::Error as AnyhowError;
 use futures::{StreamExt, stream::FuturesUnordered};
@@ -27,7 +27,7 @@ impl SessionMap {
     )
   }
 
-  fn get<U: Borrow<Ulid>>(&self, session_id: Option<U>) -> Result<&Session, AnyhowError> {
+  pub fn get<U: Borrow<Ulid>>(&self, session_id: Option<U>) -> Result<&Session, AnyhowError> {
     if let Some(session_id) = session_id {
       self.sessions.get(session_id.borrow()).check_present()
     } else if self.sessions.len() == 1 {
@@ -123,15 +123,7 @@ impl SessionMap {
     } else {
       kill_server_event.set();
 
-      self
-        .sessions
-        .values_mut()
-        .map(Session::kill)
-        .join_all()
-        .await
-        .into_iter()
-        .collect::<Result<(), IoError>>()?
-        .ok()
+      self.sessions.values_mut().map(Session::kill).try_join_all().await
     }
   }
 

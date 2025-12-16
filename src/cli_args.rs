@@ -2,15 +2,16 @@ use std::io::Error as IoError;
 
 use anyhow::Error as AnyhowError;
 use clap::Parser;
-use futures::SinkExt;
-use mkutils::{Socket, Tracing, Utils};
+use crossterm::event::EventStream as CrosstermEventStream;
+use futures::{SinkExt, StreamExt};
+use mkutils::{Output, Screen, Socket, Tracing, Utils};
 use serde_json::Value as Json;
 use tracing_subscriber::filter::LevelFilter;
 
 use crate::{
   commands::{
     Command, FileCommand, GetCommand, InfoViewCommand, KillCommand, ListCommand, NewSessionCommand,
-    NotificationsCommand,
+    NotificationsCommand, TuiCommand,
   },
   server::Server,
 };
@@ -111,15 +112,29 @@ impl CliArgs {
 
   async fn notifications(notifications_command: NotificationsCommand) -> Result<(), AnyhowError> {
     let mut socket = Self::socket().await?;
-    let command = notifications_command.convert::<Command>();
 
-    socket.send(command).await?;
+    socket.serialize(notifications_command).await?;
 
     while let Some(notification_json_res) = socket.recv::<Json>().await.into_option() {
       notification_json_res?.to_json_str()?.println();
     }
 
     ().ok()
+  }
+
+  async fn tui(tui_command: TuiCommand) -> Output<(), AnyhowError> {
+    let mut socket = Self::socket().await?;
+    let mut crossterm_event_stream = CrosstermEventStream::new();
+    let mut screen = Screen::new(true)?;
+
+    socket.serialize(tui_command).await?;
+
+    loop {
+      tokio::select! {
+        event_res_opt = crossterm_event_stream.next() => socket.send(event_res_opt.check_next()??).await?,
+        byte_str_output = socket.recv::<Vec<u8>>() => screen.writer().write_all_and_flush(&byte_str_output?)?,
+      }
+    }
   }
 
   pub async fn run(self) -> Result<(), AnyhowError> {
@@ -134,6 +149,7 @@ impl CliArgs {
       Command::New(new_session_command) => Self::new_session(new_session_command).await,
       Command::Notifications(notifications_command) => Self::notifications(notifications_command).await,
       Command::Serve => Server::serve().await,
+      Command::Tui(tui_command) => Self::tui(tui_command).await.into_end(),
     }
   }
 }

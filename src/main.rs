@@ -4,11 +4,13 @@ mod cli_args;
 mod commands;
 mod lean_server_process;
 mod message;
+mod notification;
 mod open_file;
 mod responses;
 mod server;
 mod session;
 mod session_map;
+mod tui;
 mod types;
 
 use anyhow::Error as AnyhowError;

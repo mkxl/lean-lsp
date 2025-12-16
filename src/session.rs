@@ -17,6 +17,7 @@ use crate::{
   },
   lean_server_process::LeanServerProcess,
   message::{Id, Message},
+  notification::Notification,
   open_file::{OpenFile, OpenFileMap},
   responses::{GetPlainGoalsResponse, HoverFileResponse},
   types::{AppError, Position, SessionInfo, Utf16},
@@ -45,7 +46,7 @@ pub struct Session {
   lean_server_process: LeanServerProcess,
   enrich_utf16_positions: bool,
   requests: HashMap<Id, Request>,
-  notifications: BroadcastSender<Json>,
+  notifications: BroadcastSender<Notification>,
   join_set: JoinSet<Result<(), AnyhowError>>,
 }
 
@@ -112,13 +113,17 @@ impl Session {
     SessionMessage::new(self, message)
   }
 
-  fn on_notification(&self, message: Message) {
+  fn on_notification(&self, message: Message) -> Result<(), AnyhowError> {
     tracing::info!(
       received_notification = message.json.as_valuable(),
       "received notification"
     );
 
-    self.notifications.send(message.json).log_if_error().unit();
+    let notification = message.json.into_value_from_json()?;
+
+    self.notifications.send(notification).log_if_error().unit();
+
+    ().ok()
   }
 
   fn on_get_plain_goals_response(response: Json) -> Result<GetPlainGoalsResponse, AppError> {
@@ -175,7 +180,7 @@ impl Session {
       self.open_files.enrich_positions(&mut message.json);
     }
 
-    let Some(id) = &message.id else { return self.on_notification(message).ok() };
+    let Some(id) = &message.id else { return self.on_notification(message) };
 
     if let Some(request) = self.requests.remove(id) {
       self.on_response(request, message.json).await
@@ -324,22 +329,21 @@ impl Session {
     ().ok()
   }
 
+  pub fn notification_stream(&self) -> BroadcastReceiverStream<Notification> {
+    self.notifications.subscribe().into_stream()
+  }
+
   #[tracing::instrument(skip_all, err)]
   async fn notify_impl(
     mut socket: Socket,
     notifications_command: NotificationsCommand,
-    mut notifications_stream: BroadcastReceiverStream<Json>,
+    mut notification_stream: BroadcastReceiverStream<Notification>,
   ) -> Result<(), AnyhowError> {
-    while let Some(notification_json_res) = notifications_stream.next().await {
-      let notification_json = notification_json_res?;
+    while let Some(notification_res) = notification_stream.next().await {
+      let notification = notification_res?;
 
-      if !mkutils::when! {
-        !notifications_command.methods.is_empty()
-          && let Some(method_json) = notification_json.get("method")
-          && let Some(method) = method_json.as_str()
-          && !notifications_command.methods.contains_eq(method)
-      } {
-        socket.send(notification_json).await?;
+      if notifications_command.methods.is_empty() || notifications_command.methods.contains_eq(notification.method()) {
+        socket.send(notification).await?;
       }
     }
 
@@ -347,11 +351,7 @@ impl Session {
   }
 
   pub fn notify(&mut self, socket: Socket, notifications_command: NotificationsCommand) {
-    let notify_future = Self::notify_impl(
-      socket,
-      notifications_command,
-      self.notifications.subscribe().into_stream(),
-    );
+    let notify_future = Self::notify_impl(socket, notifications_command, self.notification_stream());
 
     self.join_set.spawn(notify_future);
   }
