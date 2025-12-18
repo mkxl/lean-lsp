@@ -1095,9 +1095,9 @@ dependencies = [
 
 [[package]]
 name = "mkutils"
-version = "0.1.0"
+version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "63e738782c75158a28675d27351a9cd8ff254659bcd1486c2cf7149f53b86aea"
+checksum = "f0d410e1b293a532871df8c98360519e35205038e032ef131d0dab46b138610d"
 dependencies = [
  "anyhow",
  "bytes",
