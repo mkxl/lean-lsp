@@ -150,7 +150,7 @@ impl TuiMap {
     match output {
       Output::Ok(()) => return ().ok(),
       Output::EndOk => (),
-      Output::EndErr(error) => tracing::warn!(?error),
+      Output::EndErr(error) => error.log_error(),
     }
 
     self.tui_map.remove(&tui_event.id);
