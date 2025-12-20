@@ -141,6 +141,8 @@ impl Session {
   }
 
   async fn on_response(&mut self, request: Request, response: Json) -> Result<(), AnyhowError> {
+    tracing::info!(received_response = response.as_valuable(), "received response");
+
     match request {
       Request::GetPlainGoals(socket) => {
         Self::on_get_plain_goals_response(response)
@@ -173,8 +175,6 @@ impl Session {
 
   pub async fn on_message(&mut self, message: Result<Message, AnyhowError>) -> Result<(), AnyhowError> {
     let mut message = message?;
-
-    tracing::info!(id = %message.id.optional_display(), message = message.json.as_valuable(), "received message");
 
     if self.enrich_utf16_positions {
       self.open_files.enrich_positions(&mut message.json);
