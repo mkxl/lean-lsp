@@ -9,6 +9,7 @@ use clap::Args;
 use derive_more::{Constructor, Debug as DeriveMoreDebug};
 use mkutils::Utils;
 use serde::{Deserialize, Serialize};
+use serde_repr::{Deserialize_repr, Serialize_repr};
 use ulid::Ulid;
 
 #[derive(Deserialize, Serialize)]
@@ -106,9 +107,17 @@ pub struct Range<T> {
   end: Position<T>,
 }
 
+// NOTE: [https://leanprover-community.github.io/mathlib4_docs/Lean/Data/Lsp/Extra.html#Lean.Lsp.LeanFileProgressKind]
+#[derive(Clone, Deserialize_repr, Serialize_repr)]
+#[repr(u8)]
+pub enum Kind {
+  Processing = 1,
+  FatalError = 2,
+}
+
 #[derive(Clone, Deserialize, Serialize)]
 pub struct Processing {
-  kind: u8,
+  kind: Kind,
   range: Range<Utf16>,
 }
 
@@ -118,9 +127,19 @@ pub struct TextDocument {
   version: usize,
 }
 
+// NOTE: [https://leanprover-community.github.io/mathlib4_docs/Lean/Data/Lsp/Diagnostics.html#Lean.Lsp.DiagnosticSeverity]
+#[derive(Clone, Deserialize_repr, Serialize_repr)]
+#[repr(u8)]
+pub enum Severity {
+  Error = 1,
+  Warning = 2,
+  Information = 3,
+  Hint = 4,
+}
+
 #[derive(Clone, Deserialize, Serialize)]
 pub struct Diagnostic {
-  severity: u8,
+  severity: Severity,
   range: Range<Utf16>,
 }
 
