@@ -58,7 +58,7 @@ impl Session {
     "unable to get project dirpath: no manifest file found in ancestor directories";
   const NOTIFICATIONS_CAPACITY: usize = 32;
 
-  pub fn new(new_session_command: &NewSessionCommand) -> Result<Self, AnyhowError> {
+  pub fn new(new_session_command: &NewSessionCommand) -> Result<Self, AppError> {
     let id = Ulid::new();
     let open_files = OpenFileMap::default();
     let project_absolute_dirpath = Self::project_absolute_dirpath(&new_session_command.absolute_path)?;
