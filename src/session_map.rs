@@ -136,8 +136,13 @@ impl SessionMap {
     socket: Socket,
     new_session_command: &NewSessionCommand,
   ) -> Result<(), AnyhowError> {
-    let mut session = Session::new(new_session_command)?;
+    let mut session = match Session::new(new_session_command) {
+      Ok(session) => session,
+      Err(app_error) => return app_error.err().respond_to::<NewSessionCommand>(socket).await,
+    };
 
+    // NOTE: if [session.initialize()] returns an error we are unable to send the
+    // error over the socket as it has already been consumed
     session.initialize(socket).await?;
 
     self.sessions.insert(session.id(), session);
