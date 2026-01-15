@@ -1,7 +1,6 @@
 use std::{borrow::Borrow, collections::HashMap};
 
 use anyhow::Error as AnyhowError;
-use futures::{StreamExt, stream::FuturesUnordered};
 use mkutils::{Event, Socket, Utils};
 use ulid::Ulid;
 
@@ -48,14 +47,7 @@ impl SessionMap {
   }
 
   pub async fn next_message(&mut self) -> SessionMessage<'_> {
-    self
-      .sessions
-      .values_mut()
-      .map(Session::next_message)
-      .collect::<FuturesUnordered<_>>()
-      .next()
-      .wait_then_unwrap_or_pending()
-      .await
+    self.sessions.values_mut().map(Session::next_message).select_all().await
   }
 
   pub async fn on_file_command(&mut self, socket: Socket, file_command: FileCommand) -> Result<(), AnyhowError> {

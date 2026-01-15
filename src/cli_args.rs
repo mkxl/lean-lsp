@@ -36,6 +36,7 @@ pub struct CliArgs {
 
 impl CliArgs {
   const LOG_LEVEL_ENV_NAME: &str = "LOG_LEVEL";
+  const TUI_WITH_MOUSE_CAPTURE: bool = true;
 
   fn init_tracing(&self) {
     Tracing::default()
@@ -125,14 +126,16 @@ impl CliArgs {
   async fn tui(tui_command: TuiCommand) -> Output<(), AnyhowError> {
     let mut socket = Self::socket().await?;
     let mut crossterm_event_stream = CrosstermEventStream::new();
-    let mut screen = Screen::new(true)?;
+    let mut screen = Screen::config()
+      .with_mouse_capture(Self::TUI_WITH_MOUSE_CAPTURE)
+      .build()?;
 
     socket.serialize(tui_command).await?;
 
     loop {
       tokio::select! {
         event_res_opt = crossterm_event_stream.next() => socket.send(event_res_opt.check_next()??).await?,
-        byte_str_output = socket.recv::<Vec<u8>>() => screen.writer().write_all_and_flush(&byte_str_output?)?,
+        byte_str_output = socket.recv::<Vec<u8>>() => screen.writer_mut().write_all_and_flush(&byte_str_output?)?,
       }
     }
   }
