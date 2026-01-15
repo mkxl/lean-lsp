@@ -18,7 +18,7 @@ use crate::{
 
 #[derive(Parser)]
 pub struct CliArgs {
-  #[arg(long = "log-level", default_value_t = LevelFilter::INFO, env = Self::LOG_LEVEL_ENV_NAME)]
+  #[arg(long = "log-level", default_value_t = Tracing::DEFAULT_LEVEL_FILTER, env = Self::LOG_LEVEL_ENV_NAME)]
   tracing_level_filter: LevelFilter,
 
   #[arg(long = "no-log-json")]
