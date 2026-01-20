@@ -6,6 +6,10 @@
     url = "github:nix-community/fenix/monthly";
     inputs.nixpkgs.follows = "nixpkgs";
   };
+  inputs.crane = {
+    url = "github:ipetkov/crane";
+    inputs.nixpkgs.follows = "nixpkgs";
+  };
 
   outputs =
     {
@@ -13,52 +17,32 @@
       nixpkgs,
       flake-utils,
       fenix,
+      crane,
     }:
     flake-utils.lib.eachDefaultSystem (
       system:
       let
         pkgs = nixpkgs.legacyPackages.${system};
+
         rust-toolchain = fenix.packages.${system}.fromToolchainFile {
           file = ./rust-toolchain.toml;
           sha256 = "sha256-fx771dMiW4FXGenjzuC1dpm4R4qZa037EVRBDPsp/Zg=";
         };
-        rust-platform = pkgs.makeRustPlatform {
-          rustc = rust-toolchain;
-          cargo = rust-toolchain;
-        };
+        craneLib = (crane.mkLib pkgs).overrideToolchain (pkgs: rust-toolchain);
       in
       {
-        packages.default = rust-platform.buildRustPackage {
-          pname = "lean-lsp";
-          version = "0.1.0";
-          src = ./.;
-          cargoLock = {
-            lockFile = ./Cargo.lock;
-
-            outputHashes = {
-              "mkutils-0.1.0" = "sha256-yaNc1UWEcL1YipXG0SK03BRA4AQBOU4d5aQQYGwWOZk=";
-              "poem-3.1.12" = "sha256-UokXA76/PKGAp6NDKlKkT6wkxWdD8wxj50wPXyhn228=";
-            };
-          };
-
-          RUSTFLAGS = "--cfg tokio_unstable --cfg tracing_unstable";
-
-          nativeBuildInputs = [ pkgs.pkg-config ];
-          buildInputs = [ pkgs.openssl ];
+        packages.default = craneLib.buildPackage {
+          src = craneLib.cleanCargoSource ./.;
         };
 
-        devShells.default = pkgs.mkShell {
-          LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath [ pkgs.openssl ];
-
-          packages = [
+        devShells.default = craneLib.devShell {
+          nativeBuildInputs = [
             pkgs.pkg-config
-            pkgs.openssl
             pkgs.cargo-watch
             pkgs.tokio-console
-
-            rust-toolchain
           ];
         };
+
         formatter = pkgs.nixfmt;
       }
     );
