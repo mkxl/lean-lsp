@@ -36,6 +36,18 @@ pub struct Position<T> {
   pub character: usize,
 
   #[arg(skip)]
+  pub character_bytes: Option<usize>,
+
+  #[arg(skip)]
+  pub character_utf8: Option<usize>,
+
+  #[arg(skip)]
+  pub previous_line_length_bytes: Option<usize>,
+
+  #[arg(skip)]
+  pub previous_line_length_utf8: Option<usize>,
+
+  #[arg(skip)]
   #[debug(skip)]
   #[serde(skip)]
   phantom: PhantomData<T>,
@@ -48,6 +60,10 @@ impl<T> Position<T> {
     Self {
       line,
       character,
+      character_bytes: None,
+      character_utf8: None,
+      previous_line_length_bytes: None,
+      previous_line_length_utf8: None,
       phantom,
     }
   }
@@ -141,6 +157,7 @@ pub enum Severity {
 pub struct Diagnostic {
   severity: Severity,
   range: Range<Utf16>,
+  message: String,
 }
 
 #[derive(Constructor, Deserialize, Serialize)]
