@@ -5,7 +5,6 @@ use clap::Parser;
 use crossterm::event::EventStream as CrosstermEventStream;
 use futures::{SinkExt, StreamExt};
 use mkutils::{Output, Screen, Socket, Tracing, Utils};
-use serde_json::Value as Json;
 use tracing_subscriber::filter::LevelFilter;
 
 use crate::{
@@ -13,6 +12,7 @@ use crate::{
     Command, FileCommand, GetCommand, InfoViewCommand, KillCommand, ListCommand, NewSessionCommand,
     NotificationsCommand, TuiCommand,
   },
+  notification::Notification,
   server::Server,
 };
 
@@ -116,8 +116,8 @@ impl CliArgs {
 
     socket.serialize(notifications_command).await?;
 
-    while let Some(notification_json_res) = socket.recv::<Json>().await.into_option() {
-      notification_json_res?.to_json_str()?.println();
+    while let Some(notification_res) = socket.recv::<Notification>().await.into_option() {
+      notification_res?.to_json_str()?.println();
     }
 
     ().ok()
