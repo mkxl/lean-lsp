@@ -1,4 +1,4 @@
-use std::io::Error as IoError;
+use std::io::{Error as IoError, Write};
 
 use anyhow::Error as AnyhowError;
 use clap::Parser;
@@ -135,7 +135,7 @@ impl CliArgs {
     loop {
       tokio::select! {
         event_res_opt = crossterm_event_stream.next() => socket.send(event_res_opt.check_next()??).await?,
-        byte_str_output = socket.recv::<Vec<u8>>() => screen.writer_mut().write_all_and_flush(&byte_str_output?)?,
+        byte_str_output = socket.recv::<Vec<u8>>() => screen.writer_mut().write_all_then(&byte_str_output?)?.flush()?,
       }
     }
   }

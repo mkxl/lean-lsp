@@ -22,7 +22,8 @@ impl Server {
   pub const SOCKET_FILEPATH_STR: &str = "/tmp/lean-lsp.sock";
 
   const ON_SERVE_COMMAND_ERROR_MESSAGE: &str = "lean-lsp server is already running";
-  const RENDER_PERIOD_DURATION: Duration = Duration::from_millis(20);
+  const DURATION_RENDER_PERIOD: Duration = Duration::from_millis(20);
+  const DURATION_KEEP_ALIVE_PERIOD: Duration = Duration::from_secs(5);
 
   fn on_serve_command() -> Result<(), AppError> {
     anyhow::anyhow!(Self::ON_SERVE_COMMAND_ERROR_MESSAGE).err()?
@@ -77,7 +78,8 @@ impl Server {
     Self::SOCKET_FILEPATH_STR.remove_file().unit();
 
     let listener = UnixListener::bind(Self::SOCKET_FILEPATH_STR)?;
-    let mut render_interval = tokio::time::interval(Self::RENDER_PERIOD_DURATION);
+    let mut render_interval = Self::DURATION_RENDER_PERIOD.into_interval();
+    let mut keep_alive_interval = Self::DURATION_KEEP_ALIVE_PERIOD.into_interval();
 
     loop {
       tokio::select! {
@@ -85,6 +87,7 @@ impl Server {
         session_message = self.session_map.next_message() => session_message.session.on_message(session_message.message).await,
         tui_event = self.tui_map.next_event() => self.tui_map.on_tui_event(tui_event).await,
         _instant = render_interval.tick() => self.tui_map.render().await,
+        _instant = keep_alive_interval.tick() => self.session_map.send_keep_alive().await,
         () = self.kill_event.wait() => return ().ok()
       }
       .log_if_error()

@@ -2,10 +2,9 @@ use std::{collections::HashMap, io::Error as IoError};
 
 use anyhow::Error as AnyhowError;
 use camino::{Utf8Path, Utf8PathBuf};
-use derive_more::Constructor;
+use derive_more::{Constructor, Debug as DeriveMoreDebug};
 use futures::{SinkExt, StreamExt};
 use mkutils::{Socket, Utils};
-use serde_json::Value as Json;
 use tokio::{sync::broadcast::Sender as BroadcastSender, task::JoinSet};
 use tokio_stream::wrappers::BroadcastStream as BroadcastReceiverStream;
 use ulid::Ulid;
@@ -20,7 +19,7 @@ use crate::{
   notification::Notification,
   open_file::{OpenFile, OpenFileMap},
   responses::{GetPlainGoalsResponse, HoverFileResponse},
-  types::{AppError, Position, SessionInfo, Utf16},
+  types::{AppError, Position, RpcConnected, SessionInfo, Utf16},
 };
 
 #[derive(Constructor)]
@@ -29,10 +28,11 @@ pub struct SessionMessage<'a> {
   pub message: Result<Message, AnyhowError>,
 }
 
+#[derive(DeriveMoreDebug)]
 enum Request {
-  GetPlainGoals(Socket),
-  HoverFile(Socket),
-  Initialize(Socket),
+  GetPlainGoals(#[debug(skip)] Socket),
+  HoverFile(#[debug(skip)] Socket),
+  Initialize(#[debug(skip)] Socket),
   LeanRpcConnect,
   TextDocumentDocumentCodeAction,
   TextDocumentDocumentSymbol,
@@ -41,6 +41,7 @@ enum Request {
 
 pub struct Session {
   id: Ulid,
+  lake_session_id: Option<String>,
   project_absolute_dirpath: Utf8PathBuf,
   open_files: OpenFileMap,
   lean_server_process: LeanServerProcess,
@@ -57,9 +58,11 @@ impl Session {
   const MISSING_MANIFEST_ERROR_MESSAGE: &str =
     "unable to get project dirpath: no manifest file found in ancestor directories";
   const NOTIFICATIONS_CAPACITY: usize = 32;
+  const SEND_NOTIFICATION_CONTEXT: &str = "unable to send notification";
 
   pub fn new(new_session_command: &NewSessionCommand) -> Result<Self, AppError> {
     let id = Ulid::new();
+    let lake_session_id = None;
     let open_files = OpenFileMap::default();
     let project_absolute_dirpath = Self::project_absolute_dirpath(&new_session_command.absolute_path)?;
     let lean_server_process = LeanServerProcess::new(
@@ -73,6 +76,7 @@ impl Session {
     let join_set = JoinSet::new();
     let session = Self {
       id,
+      lake_session_id,
       project_absolute_dirpath,
       open_files,
       lean_server_process,
@@ -121,17 +125,22 @@ impl Session {
 
     let notification = message.json.into_value_from_json()?;
 
-    self.notifications.send(notification).log_if_error().unit();
+    if let Err(send_error) = self.notifications.send(notification) {
+      send_error
+        .anyhow_msg_error()
+        .context(Self::SEND_NOTIFICATION_CONTEXT)
+        .log_error();
+    }
 
     ().ok()
   }
 
-  fn on_get_plain_goals_response(response: Json) -> Result<GetPlainGoalsResponse, AppError> {
-    response.into_value_from_json::<GetPlainGoalsResponse>()?.ok()
+  fn on_get_plain_goals_response(message: Message) -> Result<GetPlainGoalsResponse, AppError> {
+    message.json.into_value_from_json::<GetPlainGoalsResponse>()?.ok()
   }
 
-  fn on_hover_file_response(response: Json) -> Result<HoverFileResponse, AppError> {
-    response.into_value_from_json::<HoverFileResponse>()?.ok()
+  fn on_hover_file_response(message: Message) -> Result<HoverFileResponse, AppError> {
+    message.json.into_value_from_json::<HoverFileResponse>()?.ok()
   }
 
   async fn on_initialize_response(&mut self) -> Result<SessionInfo, AppError> {
@@ -140,17 +149,31 @@ impl Session {
     self.info().ok()
   }
 
-  async fn on_response(&mut self, request: Request, response: Json) -> Result<(), AnyhowError> {
-    tracing::info!(received_response = response.as_valuable(), "received response");
+  fn on_lean_rpc_connect_response(&mut self, message: Message) -> Result<(), AnyhowError> {
+    if self.lake_session_id.is_some() {
+      return ().ok();
+    }
+
+    self.lake_session_id = message.into_response::<RpcConnected>()?.session_id.some();
+
+    ().ok()
+  }
+
+  async fn on_response(&mut self, request: Request, message: Message) -> Result<(), AnyhowError> {
+    tracing::info!(
+      ?request,
+      received_response = message.json.as_valuable(),
+      "received response"
+    );
 
     match request {
       Request::GetPlainGoals(socket) => {
-        Self::on_get_plain_goals_response(response)
+        Self::on_get_plain_goals_response(message)
           .respond_to::<GetPlainGoalsCommand>(socket)
           .await?;
       }
       Request::HoverFile(socket) => {
-        Self::on_hover_file_response(response)
+        Self::on_hover_file_response(message)
           .respond_to::<HoverFileCommand>(socket)
           .await?;
       }
@@ -161,8 +184,8 @@ impl Session {
           .respond_to::<NewSessionCommand>(socket)
           .await?;
       }
-      Request::LeanRpcConnect
-      | Request::TextDocumentDocumentCodeAction
+      Request::LeanRpcConnect => self.on_lean_rpc_connect_response(message)?,
+      Request::TextDocumentDocumentCodeAction
       | Request::TextDocumentDocumentSymbol
       | Request::TextDocumentFoldingRange => (),
     }
@@ -183,7 +206,7 @@ impl Session {
     let Some(id) = &message.id else { return self.on_notification(message) };
 
     if let Some(request) = self.requests.remove(id) {
-      self.on_response(request, message.json).await
+      self.on_response(request, message).await
     } else {
       Self::on_request(&message).ok()
     }
@@ -216,6 +239,14 @@ impl Session {
     self.send_request(request, message).await
   }
 
+  pub async fn send_keep_alive(&mut self) -> Result<(), AnyhowError> {
+    let Some(lake_session_id) = self.lake_session_id.as_deref() else { return ().ok() };
+    let root_uri = self.project_absolute_dirpath.to_uri()?;
+    let message = Message::lean_rpc_keep_alive_notification(&root_uri, lake_session_id);
+
+    self.send_notification(message).await
+  }
+
   pub async fn change_file(&mut self, change_file_command: &ChangeFileCommand) -> Result<(), AppError> {
     let open_file = self.open_files.get_mut(&change_file_command.filepath)?;
     let new_version = open_file.increment_version();
@@ -223,7 +254,7 @@ impl Session {
     let text = change_file_command
       .input_filepath
       .as_path()
-      .read_to_string_async()
+      .read_to_string_fs_async()
       .await
       .result?;
     let message = Message::text_document_did_change_notification(&text, &uri, new_version);
@@ -263,11 +294,10 @@ impl Session {
     let uri = open_file_command.filepath.to_uri()?;
     let text = open_file_command
       .filepath
-      .open_async()
-      .await?
-      .buf_reader_async()
-      .read_string_async()
-      .await?;
+      .as_path()
+      .read_to_string_fs_async()
+      .await
+      .result?;
     let open_file = OpenFile::new(text);
     let text_document_did_open_notification_message =
       Message::text_document_did_open_notification(open_file.text(), &uri);

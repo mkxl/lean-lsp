@@ -50,6 +50,15 @@ impl SessionMap {
     self.sessions.values_mut().map(Session::next_message).select_all().await
   }
 
+  pub async fn send_keep_alive(&mut self) -> Result<(), AnyhowError> {
+    self
+      .sessions
+      .values_mut()
+      .map(Session::send_keep_alive)
+      .try_join_all()
+      .await
+  }
+
   pub async fn on_file_command(&mut self, socket: Socket, file_command: FileCommand) -> Result<(), AnyhowError> {
     match file_command {
       FileCommand::Change(change_file_command) => {
@@ -134,9 +143,8 @@ impl SessionMap {
     };
 
     // NOTE: if [session.initialize()] returns an error we are unable to send the
-    // error over the socket as it has already been consumed
+    // error over the socket as the socket has already been consumed
     session.initialize(socket).await?;
-
     self.sessions.insert(session.id(), session);
 
     ().ok()
