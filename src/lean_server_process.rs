@@ -4,7 +4,7 @@ use anyhow::{Context, Error as AnyhowError};
 use bytes::{Buf, BytesMut};
 use camino::Utf8Path;
 use futures::StreamExt;
-use mkutils::{Process, Utils};
+use mkutils::{Process, ProcessBuilder, Utils};
 use serde::Serialize;
 use tokio::{
   io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt},
@@ -104,7 +104,11 @@ impl LeanServerProcess {
     log_dirpath: Option<&Utf8Path>,
   ) -> Result<Process, AnyhowError> {
     let env = Self::env(log_dirpath);
-    let process = Process::new(lake_filepath, Self::LAKE_ARGS, env, project_absolute_dirpath)?;
+    let process = ProcessBuilder::new(lake_filepath)
+      .args(Self::LAKE_ARGS)
+      .env(env)
+      .current_dirpath(project_absolute_dirpath)
+      .build()?;
 
     process.ok()
   }

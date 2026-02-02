@@ -7,27 +7,27 @@ use anyhow::{Context, Error as AnyhowError};
 use camino::Utf8PathBuf;
 use clap::Args;
 use derive_more::{Constructor, Debug as DeriveMoreDebug};
-use mkutils::Utils;
+use mkutils::{Default as MkutilsDefault, Utils};
 use serde::{Deserialize, Serialize};
 use serde_repr::{Deserialize_repr, Serialize_repr};
 use ulid::Ulid;
 
-#[derive(Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct PlainGoals {
   pub goals: Vec<String>,
   pub rendered: String,
 }
 
-#[derive(Clone, Copy, Deserialize, Serialize)]
+#[derive(Clone, Copy, Debug, Deserialize, Serialize)]
 pub struct Utf8;
 
-#[derive(Clone, Copy, Deserialize, Serialize)]
+#[derive(Clone, Copy, Debug, Deserialize, Serialize)]
 pub struct Utf16;
 
-#[derive(Clone, Copy, Deserialize, Serialize)]
+#[derive(Clone, Copy, Debug, Deserialize, Serialize)]
 pub struct Bytes;
 
-#[derive(Args, Clone, Copy, DeriveMoreDebug, Deserialize, Serialize)]
+#[derive(Args, Clone, Copy, MkutilsDefault, DeriveMoreDebug, Deserialize, Serialize)]
 pub struct Position<T> {
   #[arg(long)]
   pub line: usize,
@@ -54,17 +54,11 @@ pub struct Position<T> {
 }
 
 impl<T> Position<T> {
-  pub const fn new(line: usize, character: usize) -> Self {
-    let phantom = PhantomData;
-
+  pub fn new(line: usize, character: usize) -> Self {
     Self {
       line,
       character,
-      character_bytes: None,
-      character_utf8: None,
-      previous_line_length_bytes: None,
-      previous_line_length_utf8: None,
-      phantom,
+      ..Self::default()
     }
   }
 }
@@ -108,7 +102,7 @@ impl Position<Utf16> {
   }
 }
 
-#[derive(Args, DeriveMoreDebug, Deserialize, Serialize)]
+#[derive(Args, Debug, Deserialize, Serialize)]
 pub struct Location<T> {
   pub filepath: Utf8PathBuf,
 
@@ -117,34 +111,34 @@ pub struct Location<T> {
   pub position: Position<T>,
 }
 
-#[derive(Clone, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Range<T> {
   start: Position<T>,
   end: Position<T>,
 }
 
 // NOTE: [https://leanprover-community.github.io/mathlib4_docs/Lean/Data/Lsp/Extra.html#Lean.Lsp.LeanFileProgressKind]
-#[derive(Clone, Deserialize_repr, Serialize_repr)]
+#[derive(Clone, Debug, Deserialize_repr, Serialize_repr)]
 #[repr(u8)]
 pub enum Kind {
   Processing = 1,
   FatalError = 2,
 }
 
-#[derive(Clone, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Processing {
   kind: Kind,
   range: Range<Utf16>,
 }
 
-#[derive(Clone, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct TextDocument {
   uri: String,
   version: usize,
 }
 
 // NOTE: [https://leanprover-community.github.io/mathlib4_docs/Lean/Data/Lsp/Diagnostics.html#Lean.Lsp.DiagnosticSeverity]
-#[derive(Clone, Deserialize_repr, Serialize_repr)]
+#[derive(Clone, Debug, Deserialize_repr, Serialize_repr)]
 #[repr(u8)]
 pub enum Severity {
   Error = 1,
@@ -153,17 +147,24 @@ pub enum Severity {
   Hint = 4,
 }
 
-#[derive(Clone, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Diagnostic {
-  severity: Severity,
-  range: Range<Utf16>,
-  message: String,
+  pub severity: Severity,
+  pub range: Range<Utf16>,
+  pub message: String,
 }
 
-#[derive(Constructor, Deserialize, Serialize)]
+#[derive(Constructor, Debug, Deserialize, Serialize)]
 pub struct SessionInfo {
   pub id: Ulid,
   pub project_dirpath: Utf8PathBuf,
+}
+
+// NOTE: [https://leanprover-community.github.io/mathlib4_docs/Lean/Data/Lsp/Extra.html#Lean.Lsp.RpcConnected]
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RpcConnected {
+  pub session_id: String,
 }
 
 #[derive(Constructor, Deserialize, Serialize)]

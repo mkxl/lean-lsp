@@ -2,10 +2,11 @@ pub mod initialize;
 pub mod lean_rpc;
 pub mod text_document;
 
+use anyhow::Error as AnyhowError;
 use camino::Utf8Path;
 use derive_more::{Constructor, Display, From};
 use mkutils::Utils;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use serde_json::Value as Json;
 use ulid::Ulid;
 
@@ -23,8 +24,21 @@ pub enum Id {
   Named(String),
 }
 
+// NOTE: [https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#responseMessage]
+#[derive(Debug, Deserialize)]
+pub struct ResponseError {
+  pub message: String,
+}
+
+#[derive(Deserialize)]
+pub struct Response<T> {
+  pub result: Option<T>,
+  pub error: Option<ResponseError>,
+}
+
 #[derive(Constructor, Deserialize, Serialize)]
 pub struct Message {
+  #[serde(skip_serializing_if = "Option::is_none")]
   pub id: Option<Id>,
 
   #[serde(flatten)]
@@ -52,6 +66,18 @@ impl Message {
     Self::new(None, json)
   }
 
+  pub fn into_response<T: DeserializeOwned>(self) -> Result<T, AnyhowError> {
+    let response = self.json.into_value_from_json::<Response<T>>()?;
+
+    if let Some(result) = response.result {
+      result.ok()
+    } else if let Some(error) = response.error {
+      error.message.anyhow_msg_error().err()
+    } else {
+      anyhow::bail!("unable to deserialize message as response")
+    }
+  }
+
   pub fn initialize_request(root_path: &Utf8Path, root_uri: &str, name: &str) -> Self {
     let params = crate::message::initialize::initialize_params(root_path, root_uri, name, std::process::id());
 
@@ -68,6 +94,12 @@ impl Message {
     let params = crate::message::lean_rpc::connect_params(uri);
 
     Self::request("$/lean/rpc/connect", &params)
+  }
+
+  pub fn lean_rpc_keep_alive_notification(uri: &str, lake_session_id: &str) -> Self {
+    let params = crate::message::lean_rpc::keep_alive_params(uri, lake_session_id);
+
+    Self::notification("$/lean/rpc/keepAlive", &params)
   }
 
   pub fn lean_rpc_get_plain_goals_request(uri: &str, position: Position<Utf16>) -> Self {
