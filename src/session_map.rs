@@ -7,7 +7,7 @@ use ulid::Ulid;
 use crate::{
   commands::{
     ChangeFileCommand, CloseFileCommand, FileCommand, GetCommand, InfoViewCommand, KillCommand, NewSessionCommand,
-    NotificationsCommand, OpenFileCommand,
+    NotificationsCommand, OpenFileCommand, RebuildCommand,
   },
   session::{Session, SessionMessage},
   types::{AppError, SessionInfo},
@@ -135,7 +135,7 @@ impl SessionMap {
   pub async fn on_new_session_command(
     &mut self,
     socket: Socket,
-    new_session_command: &NewSessionCommand,
+    new_session_command: NewSessionCommand,
   ) -> Result<(), AnyhowError> {
     let mut session = match Session::new(new_session_command) {
       Ok(session) => session,
@@ -159,5 +159,9 @@ impl SessionMap {
       .get_mut(notifications_command.session_id)?
       .notify(socket, notifications_command)
       .ok()
+  }
+
+  pub async fn on_rebuild_command(&mut self, rebuild_command: &RebuildCommand) -> Result<(), AppError> {
+    self.get_mut(rebuild_command.session_id)?.rebuild().await
   }
 }

@@ -10,7 +10,7 @@ use tracing_subscriber::filter::LevelFilter;
 use crate::{
   commands::{
     Command, FileCommand, GetCommand, InfoViewCommand, KillCommand, ListCommand, NewSessionCommand,
-    NotificationsCommand, TuiCommand,
+    NotificationsCommand, RebuildCommand, TuiCommand,
   },
   notification::Notification,
   server::Server,
@@ -123,6 +123,10 @@ impl CliArgs {
     ().ok()
   }
 
+  async fn rebuild(rebuild_command: RebuildCommand) -> Result<(), AnyhowError> {
+    Self::socket().await?.request(rebuild_command).await??.ok()
+  }
+
   async fn tui(tui_command: TuiCommand) -> Output<(), AnyhowError> {
     let mut socket = Self::socket().await?;
     let mut crossterm_event_stream = CrosstermEventStream::new();
@@ -151,8 +155,9 @@ impl CliArgs {
       Command::List(list_command) => Self::list(list_command).await,
       Command::New(new_session_command) => Self::new_session(new_session_command).await,
       Command::Notifications(notifications_command) => Self::notifications(notifications_command).await,
+      Command::Rebuild(rebuild_command) => Self::rebuild(rebuild_command).await,
       Command::Serve => Server::serve().await,
-      Command::Tui(tui_command) => Self::tui(tui_command).await.into_end(),
+      Command::Tui(tui_command) => Self::tui(tui_command).await.into_result(),
     }
   }
 }

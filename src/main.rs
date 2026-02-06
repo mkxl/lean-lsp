@@ -1,4 +1,5 @@
 #![recursion_limit = "256"]
+#![feature(exit_status_error)]
 
 mod cli_args;
 mod commands;
