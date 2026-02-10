@@ -46,6 +46,10 @@ impl OpenFileMap {
   const FILE_NOT_OPEN_MESSAGE: &str = "file is not open";
   const FILE_ALREADY_OPEN_MESSAGE: &str = "file is already open";
 
+  pub fn clear(&mut self) {
+    self.open_files.clear();
+  }
+
   pub fn insert(&mut self, filepath: Utf8PathBuf, open_file: OpenFile) {
     self.open_files.insert(filepath, open_file);
   }

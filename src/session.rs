@@ -4,7 +4,7 @@ use anyhow::Error as AnyhowError;
 use camino::{Utf8Path, Utf8PathBuf};
 use derive_more::{Constructor, Debug as DeriveMoreDebug};
 use futures::{SinkExt, StreamExt};
-use mkutils::{Socket, Utils};
+use mkutils::{ProcessBuilder, Socket, Utils};
 use tokio::{sync::broadcast::Sender as BroadcastSender, task::JoinSet};
 use tokio_stream::wrappers::BroadcastStream as BroadcastReceiverStream;
 use ulid::Ulid;
@@ -45,7 +45,7 @@ pub struct Session {
   project_absolute_dirpath: Utf8PathBuf,
   open_files: OpenFileMap,
   lean_server_process: LeanServerProcess,
-  enrich_utf16_positions: bool,
+  new_session_command: NewSessionCommand,
   requests: HashMap<Id, Request>,
   notifications: BroadcastSender<Notification>,
   join_set: JoinSet<Result<(), AnyhowError>>,
@@ -54,13 +54,14 @@ pub struct Session {
 impl Session {
   pub const DEFAULT_PATH_STR: &str = ".";
 
+  const LAKE_BUILD_SUBCOMMAD: &str = "build";
   const MANIFEST_FILE_NAME: &str = "lake-manifest.json";
   const MISSING_MANIFEST_ERROR_MESSAGE: &str =
     "unable to get project dirpath: no manifest file found in ancestor directories";
   const NOTIFICATIONS_CAPACITY: usize = 32;
   const SEND_NOTIFICATION_CONTEXT: &str = "unable to send notification";
 
-  pub fn new(new_session_command: &NewSessionCommand) -> Result<Self, AppError> {
+  pub fn new(new_session_command: NewSessionCommand) -> Result<Self, AppError> {
     let id = Ulid::new();
     let lake_session_id = None;
     let open_files = OpenFileMap::default();
@@ -70,7 +71,6 @@ impl Session {
       new_session_command.lean_server_log_dirpath.as_deref(),
       &project_absolute_dirpath,
     )?;
-    let enrich_utf16_positions = new_session_command.enrich_utf16_positions;
     let requests = HashMap::new();
     let (notifications, _notifications_receiver) = tokio::sync::broadcast::channel(Self::NOTIFICATIONS_CAPACITY);
     let join_set = JoinSet::new();
@@ -80,7 +80,7 @@ impl Session {
       project_absolute_dirpath,
       open_files,
       lean_server_process,
-      enrich_utf16_positions,
+      new_session_command,
       requests,
       notifications,
       join_set,
@@ -199,7 +199,7 @@ impl Session {
   pub async fn on_message(&mut self, message: Result<Message, AnyhowError>) -> Result<(), AnyhowError> {
     let mut message = message?;
 
-    if self.enrich_utf16_positions {
+    if self.new_session_command.enrich_utf16_positions {
       self.open_files.enrich_positions(&mut message.json);
     }
 
@@ -384,5 +384,36 @@ impl Session {
     let notify_future = Self::notify_impl(socket, notifications_command, self.notification_stream());
 
     self.join_set.spawn(notify_future);
+  }
+
+  fn reset(&mut self) -> Result<(), AnyhowError> {
+    self.lake_session_id.take();
+    self.open_files.clear();
+    self.requests.clear();
+
+    self.lean_server_process = LeanServerProcess::new(
+      &self.new_session_command.lake_filepath,
+      self.new_session_command.lean_server_log_dirpath.as_deref(),
+      &self.project_absolute_dirpath,
+    )?;
+
+    ().ok()
+  }
+
+  pub async fn rebuild(&mut self) -> Result<(), AppError> {
+    let rebuild_output = ProcessBuilder::new(&self.new_session_command.lake_filepath)
+      .arg(Self::LAKE_BUILD_SUBCOMMAD)
+      .current_dirpath(&self.project_absolute_dirpath)
+      .command_mut()
+      .spawn()?
+      .wait_with_output()
+      .await?;
+
+    tracing::info!(?rebuild_output);
+
+    rebuild_output.exit_ok()?;
+    self.reset()?;
+
+    ().ok()
   }
 }

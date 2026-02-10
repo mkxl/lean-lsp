@@ -99,7 +99,8 @@ impl Tui {
   async fn render(&mut self) -> Result<(), AnyhowError> {
     self
       .terminal
-      .draw(|frame| Self::render_impl(frame, self.session_id, &self.notifications).io_result())?
+      .draw(|frame| Self::render_impl(frame, self.session_id, &self.notifications))?
+      .take_byte_str()
       .send_to(&mut self.socket)
       .await?
       .ok()

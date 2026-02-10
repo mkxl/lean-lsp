@@ -126,6 +126,13 @@ pub struct NotificationsCommand {
 }
 
 #[derive(Args, Debug, Deserialize, Serialize, TypeAssoc)]
+#[type_assoc(impl_trait = Request, Response = Result<(), AppError>, Serialized = Command)]
+pub struct RebuildCommand {
+  #[arg(long)]
+  pub session_id: Option<Ulid>,
+}
+
+#[derive(Args, Debug, Deserialize, Serialize, TypeAssoc)]
 #[type_assoc(impl_trait = Request, Serialized = Command)]
 pub struct TuiCommand {
   #[arg(long)]
@@ -157,6 +164,8 @@ pub enum Command {
   New(NewSessionCommand),
 
   Notifications(NotificationsCommand),
+
+  Rebuild(RebuildCommand),
 
   Serve,
 
