@@ -124,7 +124,7 @@ impl CliArgs {
   }
 
   async fn rebuild(rebuild_command: RebuildCommand) -> Result<(), AnyhowError> {
-    Self::socket().await?.request(rebuild_command).await??.ok()
+    Self::socket().await?.request(rebuild_command).await??.unit().ok()
   }
 
   async fn tui(tui_command: TuiCommand) -> Output<(), AnyhowError> {

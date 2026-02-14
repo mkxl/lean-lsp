@@ -125,8 +125,10 @@ pub struct NotificationsCommand {
   pub methods: Vec<String>,
 }
 
+// NOTE-524ed3: use [NewSessionCommand::Response] as [RebuildCommand::Response]
+// because we send a new initialize request to `lake` after building
 #[derive(Args, Debug, Deserialize, Serialize, TypeAssoc)]
-#[type_assoc(impl_trait = Request, Response = Result<(), AppError>, Serialized = Command)]
+#[type_assoc(impl_trait = Request, Response = <NewSessionCommand as Request>::Response, Serialized = Command)]
 pub struct RebuildCommand {
   #[arg(long)]
   pub session_id: Option<Ulid>,

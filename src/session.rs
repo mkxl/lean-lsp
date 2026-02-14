@@ -54,7 +54,7 @@ pub struct Session {
 impl Session {
   pub const DEFAULT_PATH_STR: &str = ".";
 
-  const LAKE_BUILD_SUBCOMMAD: &str = "build";
+  const LAKE_BUILD_SUBCOMMAND: &str = "build";
   const MANIFEST_FILE_NAME: &str = "lake-manifest.json";
   const MISSING_MANIFEST_ERROR_MESSAGE: &str =
     "unable to get project dirpath: no manifest file found in ancestor directories";
@@ -386,10 +386,29 @@ impl Session {
     self.join_set.spawn(notify_future);
   }
 
-  fn reset(&mut self) -> Result<(), AnyhowError> {
+  async fn build(&self) -> Result<(), AnyhowError> {
+    let lake_build_output = ProcessBuilder::new(&self.new_session_command.lake_filepath)
+      .arg(Self::LAKE_BUILD_SUBCOMMAND)
+      .current_dirpath(&self.project_absolute_dirpath)
+      .command_mut()
+      .spawn()?
+      .wait_with_output()
+      .await?;
+    let lake_build_stdout = lake_build_output.stdout.into_utf8().result_display();
+    let lake_build_stderr = lake_build_output.stderr.into_utf8().result_display();
+
+    tracing::info!(%lake_build_stdout, %lake_build_stderr, lake_build_status = %lake_build_output.status);
+
+    lake_build_output.status.exit_ok()?;
+
+    ().ok()
+  }
+
+  async fn reset(&mut self, socket: Socket) -> Result<(), AnyhowError> {
     self.lake_session_id.take();
     self.open_files.clear();
     self.requests.clear();
+    self.lean_server_process.kill().await?;
 
     self.lean_server_process = LeanServerProcess::new(
       &self.new_session_command.lake_filepath,
@@ -397,22 +416,15 @@ impl Session {
       &self.project_absolute_dirpath,
     )?;
 
+    // NOTE-524ed3
+    self.initialize(socket).await?;
+
     ().ok()
   }
 
-  pub async fn rebuild(&mut self) -> Result<(), AppError> {
-    let rebuild_output = ProcessBuilder::new(&self.new_session_command.lake_filepath)
-      .arg(Self::LAKE_BUILD_SUBCOMMAD)
-      .current_dirpath(&self.project_absolute_dirpath)
-      .command_mut()
-      .spawn()?
-      .wait_with_output()
-      .await?;
-
-    tracing::info!(?rebuild_output);
-
-    rebuild_output.exit_ok()?;
-    self.reset()?;
+  pub async fn rebuild(&mut self, socket: Socket) -> Result<(), AnyhowError> {
+    self.build().await?;
+    self.reset(socket).await?;
 
     ().ok()
   }

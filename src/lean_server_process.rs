@@ -147,6 +147,7 @@ impl LeanServerProcess {
     ().ok()
   }
 
+  #[tracing::instrument(skip_all, err)]
   pub async fn kill(&mut self) -> Result<(), IoError> {
     self.log_stderr.abort();
     self.child.kill().await?;

@@ -5,7 +5,7 @@ use mkutils::{Event, Socket, Utils};
 use tokio::net::{UnixListener, UnixStream, unix::SocketAddr};
 
 use crate::{
-  commands::{Command, GetCommand, KillCommand, ListCommand, RebuildCommand},
+  commands::{Command, GetCommand, KillCommand, ListCommand},
   session_map::SessionMap,
   tui::TuiMap,
   types::AppError,
@@ -69,14 +69,7 @@ impl Server {
       Command::Notifications(notifications_command) => {
         self.session_map.on_notifications_command(socket, notifications_command)
       }
-      Command::Rebuild(rebuild_command) => {
-        self
-          .session_map
-          .on_rebuild_command(&rebuild_command)
-          .await
-          .respond_to::<RebuildCommand>(socket)
-          .await
-      }
+      Command::Rebuild(rebuild_command) => self.session_map.on_rebuild_command(socket, &rebuild_command).await,
       Command::Serve => Self::on_serve_command().send_to(socket).await,
       Command::Tui(tui_command) => self.tui_map.on_tui_command(&self.session_map, socket, &tui_command),
     }
