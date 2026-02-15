@@ -1297,9 +1297,9 @@ dependencies = [
 
 [[package]]
 name = "mkutils"
-version = "0.1.47"
+version = "0.1.64"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "03fdbcc610eeee82085906ff2953e363d186a221589d45f1846ee1d9249b6b6e"
+checksum = "22e2358b55f585c3917c22011bbb0c0312efe63ebae04bf13259944695087436"
 dependencies = [
  "anyhow",
  "bytes",
@@ -1330,9 +1330,9 @@ dependencies = [
 
 [[package]]
 name = "mkutils-macros"
-version = "0.1.47"
+version = "0.1.64"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4510c52659e4c23a3d7475dd3e568a953c0bf3b2d38b1071186f287f52bc47dd"
+checksum = "7b154f94fae701e0ac24b95a8c03098abd0d210fb9571f378412f598ddae8bbf"
 dependencies = [
  "heck",
  "proc-macro2",

@@ -161,7 +161,11 @@ impl SessionMap {
       .ok()
   }
 
-  pub async fn on_rebuild_command(&mut self, rebuild_command: &RebuildCommand) -> Result<(), AppError> {
-    self.get_mut(rebuild_command.session_id)?.rebuild().await
+  pub async fn on_rebuild_command(
+    &mut self,
+    socket: Socket,
+    rebuild_command: &RebuildCommand,
+  ) -> Result<(), AnyhowError> {
+    self.get_mut(rebuild_command.session_id)?.rebuild(socket).await
   }
 }
