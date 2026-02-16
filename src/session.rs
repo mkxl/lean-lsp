@@ -241,8 +241,8 @@ impl Session {
     }
   }
 
-  pub async fn on_input(&mut self, input: Result<Input, AnyhowError>) -> Result<(), AnyhowError> {
-    match input? {
+  pub async fn on_input(&mut self, input: Input) -> Result<(), AnyhowError> {
+    match input {
       Either::Left(tui_event) => self.tui_set.on_tui_event(tui_event).await,
       Either::Right(message) => self.on_message(message).await,
     }

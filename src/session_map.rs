@@ -181,7 +181,7 @@ impl SessionMap {
   pub async fn on_input(&mut self, session_input: SessionInput) -> Result<(), AnyhowError> {
     self
       .get_mut(session_input.session_id.some())?
-      .on_input(session_input.input)
+      .on_input(session_input.input?)
       .await
   }
 

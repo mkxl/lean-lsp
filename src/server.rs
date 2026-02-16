@@ -74,7 +74,7 @@ impl Server {
   }
 
   async fn serve_impl(mut self) -> Result<(), AnyhowError> {
-    Self::SOCKET_FILEPATH_STR.remove_file().unit();
+    Self::SOCKET_FILEPATH_STR.remove_file().mem_drop();
 
     let listener = UnixListener::bind(Self::SOCKET_FILEPATH_STR)?;
     let mut render_interval = Self::DURATION_RENDER_PERIOD.into_interval();
@@ -89,7 +89,7 @@ impl Server {
         () = self.kill_event.wait() => return ().ok()
       }
       .log_if_error()
-      .unit();
+      .mem_drop();
     }
   }
 

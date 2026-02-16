@@ -3,7 +3,7 @@ use std::io::Error as IoError;
 use anyhow::Error as AnyhowError;
 use crossterm::event::Event;
 use derive_more::Constructor;
-use mkutils::{Output, Socket, Utils};
+use mkutils::{Socket, Utils};
 use ulid::Ulid;
 
 use crate::{commands::TuiCommand, open_file::OpenFileMap, render_state::RenderState, tui::Tui};
@@ -35,14 +35,10 @@ impl TuiSet {
       .check_present()?
       .on_event(tui_event.event)
       .await;
-
-    match unit_output {
-      Output::Ok(()) => return ().ok(),
-      Output::EndOk => (),
-      Output::EndErr(error) => error.log_error(),
-    }
+    let Some(unit_res) = unit_output.into_end() else { return ().ok() };
 
     self.tuis.remove(tui_event.index);
+    unit_res.log_if_error().mem_drop();
 
     ().ok()
   }
