@@ -7,9 +7,9 @@ use ulid::Ulid;
 use crate::{
   commands::{
     ChangeFileCommand, CloseFileCommand, FileCommand, GetCommand, InfoViewCommand, KillCommand, NewSessionCommand,
-    NotificationsCommand, OpenFileCommand, RebuildCommand,
+    NotificationsCommand, OpenFileCommand, RebuildCommand, TuiCommand,
   },
-  session::{Session, SessionMessage},
+  session::{Session, SessionInput},
   types::{AppError, SessionInfo},
 };
 
@@ -46,8 +46,13 @@ impl SessionMap {
     }
   }
 
-  pub async fn next_message(&mut self) -> SessionMessage<'_> {
-    self.sessions.values_mut().map(Session::next_message).select_all().await
+  pub async fn next_session_input(&mut self) -> SessionInput {
+    self
+      .sessions
+      .values_mut()
+      .map(Session::next_session_input)
+      .select_all()
+      .await
   }
 
   pub async fn send_keep_alive(&mut self) -> Result<(), AnyhowError> {
@@ -167,5 +172,20 @@ impl SessionMap {
     rebuild_command: &RebuildCommand,
   ) -> Result<(), AnyhowError> {
     self.get_mut(rebuild_command.session_id)?.rebuild(socket).await
+  }
+
+  pub fn on_tui_command(&mut self, socket: Socket, tui_command: &TuiCommand) -> Result<(), AnyhowError> {
+    self.get_mut(tui_command.session_id)?.add_tui(socket, tui_command)?.ok()
+  }
+
+  pub async fn on_input(&mut self, session_input: SessionInput) -> Result<(), AnyhowError> {
+    self
+      .get_mut(session_input.session_id.some())?
+      .on_input(session_input.input)
+      .await
+  }
+
+  pub async fn render(&mut self) -> Result<(), AnyhowError> {
+    self.sessions.values_mut().map(Session::render).try_join_all().await
   }
 }

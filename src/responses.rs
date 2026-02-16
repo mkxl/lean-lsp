@@ -1,14 +1,13 @@
 use serde::{Deserialize, Serialize};
-use serde_json::Value as Json;
 
-use crate::types::PlainGoals;
+use crate::types::{HoverFileResult, PlainGoals};
 
-#[derive(Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct HoverFileResponse {
-  pub result: Json,
+  pub result: HoverFileResult,
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct GetPlainGoalsResponse {
   pub result: Option<PlainGoals>,
 }

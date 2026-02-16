@@ -7,11 +7,13 @@ mod lean_server_process;
 mod message;
 mod notification;
 mod open_file;
+mod render_state;
 mod responses;
 mod server;
 mod session;
 mod session_map;
 mod tui;
+mod tui_set;
 mod types;
 
 use anyhow::Error as AnyhowError;

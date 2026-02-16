@@ -117,6 +117,18 @@ pub struct Range<T> {
   end: Position<T>,
 }
 
+#[derive(Debug, Deserialize, Serialize)]
+pub struct Contents {
+  kind: String,
+  value: String,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct HoverFileResult {
+  pub contents: Contents,
+  pub range: Range<Utf16>,
+}
+
 // NOTE: [https://leanprover-community.github.io/mathlib4_docs/Lean/Data/Lsp/Extra.html#Lean.Lsp.LeanFileProgressKind]
 #[derive(Clone, Debug, Deserialize_repr, Serialize_repr)]
 #[repr(u8)]
