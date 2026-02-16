@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 use serde_repr::{Deserialize_repr, Serialize_repr};
 use ulid::Ulid;
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct PlainGoals {
   pub goals: Vec<String>,
   pub rendered: String,
@@ -117,13 +117,19 @@ pub struct Range<T> {
   end: Position<T>,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
-pub struct Contents {
-  kind: String,
-  value: String,
+impl<T> Range<T> {
+  pub const fn start(&self) -> &Position<T> {
+    &self.start
+  }
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct Contents {
+  kind: String,
+  pub value: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct HoverFileResult {
   pub contents: Contents,
   pub range: Range<Utf16>,
@@ -149,6 +155,12 @@ pub struct TextDocument {
   version: usize,
 }
 
+impl TextDocument {
+  pub fn uri(&self) -> &str {
+    &self.uri
+  }
+}
+
 // NOTE: [https://leanprover-community.github.io/mathlib4_docs/Lean/Data/Lsp/Diagnostics.html#Lean.Lsp.DiagnosticSeverity]
 #[derive(Clone, Debug, Deserialize_repr, Serialize_repr)]
 #[repr(u8)]
@@ -157,6 +169,17 @@ pub enum Severity {
   Warning = 2,
   Information = 3,
   Hint = 4,
+}
+
+impl Severity {
+  pub const fn label(&self) -> &'static str {
+    match self {
+      Self::Error => "error",
+      Self::Warning => "warning",
+      Self::Information => "info",
+      Self::Hint => "hint",
+    }
+  }
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
