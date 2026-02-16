@@ -66,7 +66,7 @@ impl Message {
     Self::new(None, json)
   }
 
-  pub fn into_response<T: DeserializeOwned>(self) -> Result<T, AnyhowError> {
+  pub fn into_result<T: DeserializeOwned>(self) -> Result<T, AnyhowError> {
     let response = self.json.into_value_from_json::<Response<T>>()?;
 
     if let Some(result) = response.result {

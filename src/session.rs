@@ -3,7 +3,7 @@ use std::{collections::HashMap, io::Error as IoError};
 use anyhow::Error as AnyhowError;
 use camino::{Utf8Path, Utf8PathBuf};
 use derive_more::{Constructor, Debug as DeriveMoreDebug};
-use futures::{SinkExt, StreamExt};
+use futures::{SinkExt, StreamExt, future::Either};
 use mkutils::{ProcessBuilder, Socket, Utils};
 use tokio::{sync::broadcast::Sender as BroadcastSender, task::JoinSet};
 use tokio_stream::wrappers::BroadcastStream as BroadcastReceiverStream;
@@ -12,20 +12,24 @@ use ulid::Ulid;
 use crate::{
   commands::{
     ChangeFileCommand, CloseFileCommand, GetPlainGoalsCommand, HoverFileCommand, NewSessionCommand,
-    NotificationsCommand, OpenFileCommand,
+    NotificationsCommand, OpenFileCommand, TuiCommand,
   },
   lean_server_process::LeanServerProcess,
   message::{Id, Message},
   notification::Notification,
   open_file::{OpenFile, OpenFileMap},
+  render_state::RenderState,
   responses::{GetPlainGoalsResponse, HoverFileResponse},
+  tui_set::{TuiEvent, TuiSet},
   types::{AppError, Position, RpcConnected, SessionInfo, Utf16},
 };
 
+pub type Input = Either<TuiEvent, Message>;
+
 #[derive(Constructor)]
-pub struct SessionMessage<'a> {
-  pub session: &'a mut Session,
-  pub message: Result<Message, AnyhowError>,
+pub struct SessionInput {
+  pub session_id: Ulid,
+  pub input: Result<Input, AnyhowError>,
 }
 
 #[derive(DeriveMoreDebug)]
@@ -49,6 +53,8 @@ pub struct Session {
   requests: HashMap<Id, Request>,
   notifications: BroadcastSender<Notification>,
   join_set: JoinSet<Result<(), AnyhowError>>,
+  tui_set: TuiSet,
+  render_state: RenderState,
 }
 
 impl Session {
@@ -74,6 +80,8 @@ impl Session {
     let requests = HashMap::new();
     let (notifications, _notifications_receiver) = tokio::sync::broadcast::channel(Self::NOTIFICATIONS_CAPACITY);
     let join_set = JoinSet::new();
+    let tui_set = TuiSet::default();
+    let render_state = RenderState::new();
     let session = Self {
       id,
       lake_session_id,
@@ -84,6 +92,8 @@ impl Session {
       requests,
       notifications,
       join_set,
+      tui_set,
+      render_state,
     };
 
     session.ok()
@@ -111,19 +121,30 @@ impl Session {
     SessionInfo::new(self.id, self.project_absolute_dirpath.clone())
   }
 
-  pub async fn next_message(&mut self) -> SessionMessage<'_> {
-    let message = self.lean_server_process.next_message().await;
+  async fn next_input(&mut self) -> Result<Input, AnyhowError> {
+    let tui_event_res_future = self.tui_set.next_tui_event();
+    let message_res_future = self.lean_server_process.next_message();
+    let input = match tui_event_res_future.into_select(message_res_future).await {
+      Either::Left(tui_event_res) => tui_event_res?.into_left(),
+      Either::Right(message_res) => message_res?.into_right(),
+    };
 
-    SessionMessage::new(self, message)
+    input.ok()
   }
 
-  fn on_notification(&self, message: Message) -> Result<(), AnyhowError> {
+  pub async fn next_session_input(&mut self) -> SessionInput {
+    SessionInput::new(self.id, self.next_input().await)
+  }
+
+  fn on_notification(&mut self, message: Message) -> Result<(), AnyhowError> {
     tracing::info!(
       received_notification = message.json.as_valuable(),
       "received notification"
     );
 
     let notification = message.json.into_value_from_json()?;
+
+    self.render_state.on_notification(&notification);
 
     if let Err(send_error) = self.notifications.send(notification) {
       send_error
@@ -135,12 +156,20 @@ impl Session {
     ().ok()
   }
 
-  fn on_get_plain_goals_response(message: Message) -> Result<GetPlainGoalsResponse, AppError> {
-    message.json.into_value_from_json::<GetPlainGoalsResponse>()?.ok()
+  fn on_get_plain_goals_response(&mut self, message: Message) -> Result<GetPlainGoalsResponse, AppError> {
+    let get_plain_goals_response = message.json.into_value_from_json()?;
+
+    self.render_state.on_get_plain_goals_response(&get_plain_goals_response);
+
+    get_plain_goals_response.ok()
   }
 
-  fn on_hover_file_response(message: Message) -> Result<HoverFileResponse, AppError> {
-    message.json.into_value_from_json::<HoverFileResponse>()?.ok()
+  fn on_hover_file_response(&mut self, message: Message) -> Result<HoverFileResponse, AppError> {
+    let hover_file_response = message.json.into_value_from_json()?;
+
+    self.render_state.on_hover_file_response(&hover_file_response);
+
+    hover_file_response.ok()
   }
 
   async fn on_initialize_response(&mut self) -> Result<SessionInfo, AppError> {
@@ -154,7 +183,7 @@ impl Session {
       return ().ok();
     }
 
-    self.lake_session_id = message.into_response::<RpcConnected>()?.session_id.some();
+    self.lake_session_id = message.into_result::<RpcConnected>()?.session_id.some();
 
     ().ok()
   }
@@ -168,12 +197,14 @@ impl Session {
 
     match request {
       Request::GetPlainGoals(socket) => {
-        Self::on_get_plain_goals_response(message)
+        self
+          .on_get_plain_goals_response(message)
           .respond_to::<GetPlainGoalsCommand>(socket)
           .await?;
       }
       Request::HoverFile(socket) => {
-        Self::on_hover_file_response(message)
+        self
+          .on_hover_file_response(message)
           .respond_to::<HoverFileCommand>(socket)
           .await?;
       }
@@ -196,9 +227,7 @@ impl Session {
     tracing::info!(received_request = message.json.as_valuable(), "received request");
   }
 
-  pub async fn on_message(&mut self, message: Result<Message, AnyhowError>) -> Result<(), AnyhowError> {
-    let mut message = message?;
-
+  async fn on_message(&mut self, mut message: Message) -> Result<(), AnyhowError> {
     if self.new_session_command.enrich_utf16_positions {
       self.open_files.enrich_positions(&mut message.json);
     }
@@ -209,6 +238,13 @@ impl Session {
       self.on_response(request, message).await
     } else {
       Self::on_request(&message).ok()
+    }
+  }
+
+  pub async fn on_input(&mut self, input: Input) -> Result<(), AnyhowError> {
+    match input {
+      Either::Left(tui_event) => self.tui_set.on_tui_event(tui_event).await,
+      Either::Right(message) => self.on_message(message).await,
     }
   }
 
@@ -427,5 +463,13 @@ impl Session {
     self.reset(socket).await?;
 
     ().ok()
+  }
+
+  pub fn add_tui(&mut self, socket: Socket, tui_command: &TuiCommand) -> Result<(), IoError> {
+    self.tui_set.push(socket, tui_command)
+  }
+
+  pub async fn render(&mut self) -> Result<(), AnyhowError> {
+    self.tui_set.render(self.id, &self.render_state, &self.open_files).await
   }
 }
