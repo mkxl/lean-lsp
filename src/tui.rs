@@ -145,7 +145,7 @@ impl Tui {
   ) {
     let file_name = file_name.white().bold();
     let row = position.line.incremented();
-    let col = position.line.incremented();
+    let col = position.character.incremented();
     let suffix = std::format!(":{row}:{col}").dark_gray();
     let color = severity.color();
     let label = severity.label().bold().fg(color);
