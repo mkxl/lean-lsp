@@ -81,7 +81,7 @@ impl Session {
     let (notifications, _notifications_receiver) = tokio::sync::broadcast::channel(Self::NOTIFICATIONS_CAPACITY);
     let join_set = JoinSet::new();
     let tui_set = TuiSet::default();
-    let render_state = RenderState::new();
+    let render_state = RenderState::default();
     let session = Self {
       id,
       lake_session_id,
@@ -142,9 +142,9 @@ impl Session {
       "received notification"
     );
 
-    let notification = message.json.into_value_from_json()?;
+    let notification = message.json.into_value_from_json::<Notification>()?;
 
-    self.render_state.on_notification(&notification);
+    self.render_state.on_notification(notification.clone());
 
     if let Err(send_error) = self.notifications.send(notification) {
       send_error
@@ -157,17 +157,19 @@ impl Session {
   }
 
   fn on_get_plain_goals_response(&mut self, message: Message) -> Result<GetPlainGoalsResponse, AppError> {
-    let get_plain_goals_response = message.json.into_value_from_json()?;
+    let get_plain_goals_response = message.json.into_value_from_json::<GetPlainGoalsResponse>()?;
 
-    self.render_state.on_get_plain_goals_response(&get_plain_goals_response);
+    self
+      .render_state
+      .on_get_plain_goals_response(get_plain_goals_response.clone());
 
     get_plain_goals_response.ok()
   }
 
   fn on_hover_file_response(&mut self, message: Message) -> Result<HoverFileResponse, AppError> {
-    let hover_file_response = message.json.into_value_from_json()?;
+    let hover_file_response = message.json.into_value_from_json::<HoverFileResponse>()?;
 
-    self.render_state.on_hover_file_response(&hover_file_response);
+    self.render_state.on_hover_file_response(hover_file_response.clone());
 
     hover_file_response.ok()
   }
