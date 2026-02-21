@@ -7,12 +7,14 @@ use anyhow::{Context, Error as AnyhowError};
 use camino::Utf8PathBuf;
 use clap::Args;
 use derive_more::{Constructor, Debug as DeriveMoreDebug};
+use enum_assoc::Assoc;
 use mkutils::{Default as MkutilsDefault, Utils};
+use ratatui::style::Color;
 use serde::{Deserialize, Serialize};
 use serde_repr::{Deserialize_repr, Serialize_repr};
 use ulid::Ulid;
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct PlainGoals {
   pub goals: Vec<String>,
   pub rendered: String,
@@ -113,49 +115,79 @@ pub struct Location<T> {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Range<T> {
-  start: Position<T>,
-  end: Position<T>,
+  pub start: Position<T>,
+  pub end: Position<T>,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Contents {
-  kind: String,
-  value: String,
+  pub kind: String,
+  pub value: String,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct HoverFileResult {
   pub contents: Contents,
   pub range: Range<Utf16>,
 }
 
 // NOTE: [https://leanprover-community.github.io/mathlib4_docs/Lean/Data/Lsp/Extra.html#Lean.Lsp.LeanFileProgressKind]
-#[derive(Clone, Debug, Deserialize_repr, Serialize_repr)]
+#[derive(Assoc, Clone, Debug, Deserialize_repr, Serialize_repr)]
 #[repr(u8)]
+#[func(pub const fn severity(&self) -> Severity)]
+#[func(pub const fn message(&self) -> &str)]
 pub enum Kind {
+  #[assoc(severity = Severity::Warning)]
+  #[assoc(message = "this line is processing")]
   Processing = 1,
+
+  #[assoc(severity = Severity::Error)]
+  #[assoc(message = "this line has a fatal error")]
   FatalError = 2,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Processing {
-  kind: Kind,
-  range: Range<Utf16>,
+  pub kind: Kind,
+  pub range: Range<Utf16>,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
 pub struct TextDocument {
-  uri: String,
-  version: usize,
+  pub uri: String,
+  pub version: usize,
+}
+
+impl TextDocument {
+  pub fn file_name(&self) -> &str {
+    self
+      .uri
+      .remove_prefix(Self::URI_PREFIX)
+      .as_utf8_path()
+      .file_name_or_self()
+  }
 }
 
 // NOTE: [https://leanprover-community.github.io/mathlib4_docs/Lean/Data/Lsp/Diagnostics.html#Lean.Lsp.DiagnosticSeverity]
-#[derive(Clone, Debug, Deserialize_repr, Serialize_repr)]
+#[derive(Assoc, Clone, Copy, Debug, Deserialize_repr, Serialize_repr)]
 #[repr(u8)]
+#[func(pub const fn label(&self) -> &'static str)]
+#[func(pub const fn color(&self) -> Color)]
 pub enum Severity {
+  #[assoc(label = "error")]
+  #[assoc(color = Color::Red)]
   Error = 1,
+
+  #[assoc(label = "warning")]
+  #[assoc(color = Color::Yellow)]
   Warning = 2,
+
+  #[assoc(label = "info")]
+  #[assoc(color = Color::Blue)]
   Information = 3,
+
+  #[assoc(label = "hint")]
+  #[assoc(color = Color::DarkGray)]
   Hint = 4,
 }
 
