@@ -18,10 +18,11 @@ use crate::{
   message::{Id, Message},
   notification::Notification,
   open_file::{OpenFile, OpenFileMap},
-  render_state::RenderState,
   responses::{GetPlainGoalsResponse, HoverFileResponse},
   tui_set::{TuiEvent, TuiSet},
   types::{AppError, Position, RpcConnected, SessionInfo, Utf16},
+  widget_set::WidgetSet,
+  widget_set_builder::WidgetSetBuilder,
 };
 
 pub type Input = Either<TuiEvent, Message>;
@@ -54,7 +55,8 @@ pub struct Session {
   notifications: BroadcastSender<Notification>,
   join_set: JoinSet<Result<(), AnyhowError>>,
   tui_set: TuiSet,
-  render_state: RenderState,
+  widget_set_builder: WidgetSetBuilder,
+  latest_widget_set: WidgetSet,
 }
 
 impl Session {
@@ -81,7 +83,8 @@ impl Session {
     let (notifications, _notifications_receiver) = tokio::sync::broadcast::channel(Self::NOTIFICATIONS_CAPACITY);
     let join_set = JoinSet::new();
     let tui_set = TuiSet::default();
-    let render_state = RenderState::default();
+    let widget_set_builder = WidgetSetBuilder::new();
+    let latest_widget_set = widget_set_builder.build();
     let session = Self {
       id,
       lake_session_id,
@@ -93,7 +96,8 @@ impl Session {
       notifications,
       join_set,
       tui_set,
-      render_state,
+      widget_set_builder,
+      latest_widget_set,
     };
 
     session.ok()
@@ -144,7 +148,9 @@ impl Session {
 
     let notification = message.json.into_value_from_json::<Notification>()?;
 
-    self.render_state.on_notification(notification.clone());
+    if let Some(widget_set) = self.widget_set_builder.on_notification(notification.clone()) {
+      self.latest_widget_set = widget_set;
+    }
 
     if let Err(send_error) = self.notifications.send(notification) {
       send_error
@@ -159,8 +165,8 @@ impl Session {
   fn on_get_plain_goals_response(&mut self, message: Message) -> Result<GetPlainGoalsResponse, AppError> {
     let get_plain_goals_response = message.json.into_value_from_json::<GetPlainGoalsResponse>()?;
 
-    self
-      .render_state
+    self.latest_widget_set = self
+      .widget_set_builder
       .on_get_plain_goals_response(get_plain_goals_response.clone());
 
     get_plain_goals_response.ok()
@@ -169,7 +175,9 @@ impl Session {
   fn on_hover_file_response(&mut self, message: Message) -> Result<HoverFileResponse, AppError> {
     let hover_file_response = message.json.into_value_from_json::<HoverFileResponse>()?;
 
-    self.render_state.on_hover_file_response(hover_file_response.clone());
+    self.latest_widget_set = self
+      .widget_set_builder
+      .on_hover_file_response(hover_file_response.clone());
 
     hover_file_response.ok()
   }
@@ -245,7 +253,7 @@ impl Session {
 
   pub async fn on_input(&mut self, input: Input) -> Result<(), AnyhowError> {
     match input {
-      Either::Left(tui_event) => self.tui_set.on_tui_event(tui_event).await,
+      Either::Left(tui_event) => self.tui_set.on_tui_event(tui_event),
       Either::Right(message) => self.on_message(message).await,
     }
   }
@@ -472,6 +480,6 @@ impl Session {
   }
 
   pub async fn render(&mut self) -> Result<(), AnyhowError> {
-    self.tui_set.render(self.id, &self.render_state, &self.open_files).await
+    self.tui_set.render(&self.latest_widget_set).await
   }
 }
