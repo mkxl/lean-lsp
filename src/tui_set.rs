@@ -4,9 +4,8 @@ use anyhow::Error as AnyhowError;
 use crossterm::event::Event;
 use derive_more::Constructor;
 use mkutils::{Socket, Utils};
-use ulid::Ulid;
 
-use crate::{commands::TuiCommand, open_file::OpenFileMap, render_state::RenderState, tui::Tui};
+use crate::{commands::TuiCommand, tui::Tui, widget_set::WidgetSet};
 
 #[derive(Constructor)]
 pub struct TuiEvent {
@@ -28,13 +27,12 @@ impl TuiSet {
     ().ok()
   }
 
-  pub async fn on_tui_event(&mut self, tui_event: TuiEvent) -> Result<(), AnyhowError> {
+  pub fn on_tui_event(&mut self, tui_event: TuiEvent) -> Result<(), AnyhowError> {
     let unit_output = self
       .tuis
       .get_mut(tui_event.index)
       .check_present()?
-      .on_event(tui_event.event)
-      .await;
+      .on_event(tui_event.event);
     let Some(unit_res) = unit_output.into_end() else { return ().ok() };
 
     self.tuis.remove(tui_event.index);
@@ -57,16 +55,11 @@ impl TuiSet {
       .await
   }
 
-  pub async fn render(
-    &mut self,
-    session_id: Ulid,
-    render_state: &RenderState,
-    open_files: &OpenFileMap,
-  ) -> Result<(), AnyhowError> {
+  pub async fn render(&mut self, widget_set: &WidgetSet) -> Result<(), AnyhowError> {
     self
       .tuis
       .iter_mut()
-      .map(|tui| tui.render(session_id, render_state, open_files))
+      .map(|tui| tui.render(widget_set))
       .try_join_all()
       .await
   }
