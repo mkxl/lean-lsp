@@ -1,2 +1,5 @@
 [build]
 rustflags = ["--cfg", "tokio_unstable", "--cfg", "tracing_unstable"]
+
+[target.aarch64-apple-darwin]
+linker = "clang"
