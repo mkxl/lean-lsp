@@ -1,17 +1,73 @@
+use std::sync::LazyLock;
+
 use getset::{Getters, MutGetters};
 use mkutils::{ScrollView, ScrollViewState, ScrollWhen, Utils};
 use ratatui::{
   Frame,
   layout::{Margin, Rect},
   style::{Style, Styled, Stylize},
-  text::Line,
+  text::{Line, Span},
   widgets::Block,
+};
+use tree_sitter_highlight::{Highlight, HighlightConfiguration, HighlightEvent, Highlighter};
+use tree_sitter_md::{
+  HIGHLIGHT_QUERY_BLOCK, HIGHLIGHT_QUERY_INLINE, INJECTION_QUERY_BLOCK, INJECTION_QUERY_INLINE, INLINE_LANGUAGE,
+  LANGUAGE,
 };
 
 use crate::{
   types::{Position, Severity, Utf16},
   widget_set_builder::WidgetSetBuilder,
 };
+
+const HIGHLIGHT_NAMES: [&str; 12] = [
+  "none",
+  "punctuation.delimiter",
+  "punctuation.special",
+  "string.escape",
+  "text.emphasis",
+  "text.literal",
+  "text.reference",
+  "text.strong",
+  "text.title",
+  "text.uri",
+  "markup.raw",
+  "markup.raw.block",
+];
+
+// Tree-sitter highlight queries are compiled once, then reused by each hover
+// render.
+static MARKDOWN_HIGHLIGHT_CONFIG: LazyLock<HighlightConfiguration> = LazyLock::new(|| {
+  let mut config = HighlightConfiguration::new(
+    LANGUAGE.into(),
+    "markdown",
+    HIGHLIGHT_QUERY_BLOCK,
+    INJECTION_QUERY_BLOCK,
+    "",
+  )
+  .expect("markdown highlight query should be valid");
+
+  config.configure(&HIGHLIGHT_NAMES);
+
+  config
+});
+
+// Inline markdown is a separate Tree-sitter grammar injected by the block
+// grammar.
+static MARKDOWN_INLINE_HIGHLIGHT_CONFIG: LazyLock<HighlightConfiguration> = LazyLock::new(|| {
+  let mut config = HighlightConfiguration::new(
+    INLINE_LANGUAGE.into(),
+    "markdown_inline",
+    HIGHLIGHT_QUERY_INLINE,
+    INJECTION_QUERY_INLINE,
+    "",
+  )
+  .expect("markdown inline highlight query should be valid");
+
+  config.configure(&HIGHLIGHT_NAMES);
+
+  config
+});
 
 #[derive(Getters)]
 #[get = "pub"]
@@ -166,9 +222,70 @@ impl WidgetSet {
     View::new(Self::TITLE_GOALS, lines)
   }
 
+  const fn tree_sitter_highlight_style(highlight: Highlight) -> Style {
+    match highlight.0 {
+      1 | 2 => Style::new().dark_gray(),
+      3 => Style::new().magenta(),
+      4 => Style::new().white().italic(),
+      5 | 10 | 11 => Style::new().yellow(),
+      6 => Style::new().green(),
+      7 => Style::new().white().bold(),
+      8 => Style::new().cyan().bold(),
+      9 => Style::new().blue().underlined(),
+      _ => Style::new().white(),
+    }
+  }
+
+  fn push_markdown_source(lines: &mut Vec<Line<'static>>, spans: &mut Vec<Span<'static>>, source: &str, style: Style) {
+    for segment in source.split_inclusive('\n') {
+      let Some(line_segment) = segment.strip_suffix('\n') else {
+        spans.push(Span::styled(segment.to_owned(), style));
+
+        continue;
+      };
+
+      spans.push(Span::styled(line_segment.to_owned(), style));
+      lines.push(std::mem::take(spans).into());
+    }
+  }
+
+  fn markdown_lines(value: &str) -> Vec<Line<'static>> {
+    let mut highlighter = Highlighter::new();
+    let Ok(events) = highlighter.highlight(&MARKDOWN_HIGHLIGHT_CONFIG, value.as_bytes(), None, |language| {
+      (language == "markdown_inline").then_some(&*MARKDOWN_INLINE_HIGHLIGHT_CONFIG)
+    }) else {
+      return value.lines().map(|line| line.to_owned().white().into()).collect();
+    };
+    let mut lines = Vec::new();
+    let mut spans = Vec::new();
+    let mut style_stack = vec![Style::new().white()];
+
+    // Highlight events are byte ranges plus start/end markers. Track the active
+    // style stack and split source ranges back into ratatui lines.
+    for event in events.flatten() {
+      match event {
+        HighlightEvent::Source { start, end } => {
+          let style = style_stack.last().copied().unwrap_or_else(Style::new);
+
+          Self::push_markdown_source(&mut lines, &mut spans, &value[start..end], style);
+        }
+        HighlightEvent::HighlightStart(highlight) => style_stack.push(Self::tree_sitter_highlight_style(highlight)),
+        HighlightEvent::HighlightEnd => {
+          style_stack.pop();
+        }
+      }
+    }
+
+    if !spans.is_empty() {
+      lines.push(spans.into());
+    }
+
+    lines
+  }
+
   fn hover_info_lines(widget_set_builder: &WidgetSetBuilder) -> Vec<Line<'static>> {
     if let Some(hover_file_result) = &widget_set_builder.hover_file_result() {
-      hover_file_result.contents.value.lines().map(Self::goal_line).collect()
+      Self::markdown_lines(&hover_file_result.contents.value)
     } else {
       Self::MESSAGE_NO_HOVER.dim().convert::<Line>().singleton()
     }
