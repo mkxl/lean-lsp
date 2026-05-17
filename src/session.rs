@@ -253,7 +253,7 @@ impl Session {
 
   pub async fn on_input(&mut self, input: Input) -> Result<(), AnyhowError> {
     match input {
-      Either::Left(tui_event) => self.tui_set.on_tui_event(tui_event),
+      Either::Left(tui_event) => self.tui_set.on_tui_event(tui_event, &mut self.latest_widget_set),
       Either::Right(message) => self.on_message(message).await,
     }
   }
@@ -480,6 +480,6 @@ impl Session {
   }
 
   pub async fn render(&mut self) -> Result<(), AnyhowError> {
-    self.tui_set.render(&self.latest_widget_set).await
+    self.tui_set.render(&mut self.latest_widget_set).await
   }
 }

@@ -60,7 +60,7 @@ impl SessionMap {
       .sessions
       .values_mut()
       .map(Session::send_keep_alive)
-      .try_join_all()
+      .try_join_all_into()
       .await
   }
 
@@ -129,7 +129,7 @@ impl SessionMap {
     } else {
       kill_server_event.set();
 
-      self.sessions.values_mut().map(Session::kill).try_join_all().await
+      self.sessions.values_mut().map(Session::kill).try_join_all_into().await
     }
   }
 
@@ -186,6 +186,11 @@ impl SessionMap {
   }
 
   pub async fn render(&mut self) -> Result<(), AnyhowError> {
-    self.sessions.values_mut().map(Session::render).try_join_all().await
+    self
+      .sessions
+      .values_mut()
+      .map(Session::render)
+      .try_join_all_into()
+      .await
   }
 }

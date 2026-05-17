@@ -1,6 +1,8 @@
 use getset::{Getters, MutGetters};
-use mkutils::{ScrollView as MkutilsScrollView, ScrollViewState, ScrollWhen, Utils};
+use mkutils::{ScrollView, ScrollViewState, ScrollWhen, Utils};
 use ratatui::{
+  Frame,
+  layout::{Margin, Rect},
   style::{Style, Styled, Stylize},
   text::Line,
   widgets::Block,
@@ -11,62 +13,34 @@ use crate::{
   widget_set_builder::WidgetSetBuilder,
 };
 
-pub type ScrollView = MkutilsScrollView<Vec<Line<'static>>>;
-
-#[derive(MutGetters)]
-#[get_mut = "pub"]
-pub struct WidgetStateSet {
-  goals: ScrollViewState,
-  hover_info: ScrollViewState,
-  messages: ScrollViewState,
-}
-
-impl WidgetStateSet {
-  pub const fn new(scroll_when: ScrollWhen) -> Self {
-    let goals = ScrollViewState::new(scroll_when);
-    let hover_info = ScrollViewState::new(scroll_when);
-    let messages = ScrollViewState::new(scroll_when);
-
-    Self {
-      goals,
-      hover_info,
-      messages,
-    }
-  }
-}
-
 #[derive(Getters)]
 #[get = "pub"]
-pub struct WidgetSet {
-  goals: ScrollView,
-  hover_info: ScrollView,
-  messages: ScrollView,
+pub struct View {
+  lines: Vec<Line<'static>>,
+  block: Block<'static>,
+  scroll_view_state: ScrollViewState,
 }
 
-impl WidgetSet {
-  const MESSAGE_NO_GOALS: &str = "No goals";
-  const MESSAGE_NO_HOVER: &str = "No information available";
-  const MESSAGE_NO_MESSAGE: &str = "No messages";
+impl View {
+  const CONTENT_AREA_MARGIN: Margin = Margin::new(1, 1);
+  const SCROLL_VIEW_STATE: ScrollViewState = ScrollViewState::new(ScrollWhen::ForLargeContent);
   const STYLE_BLOCK_BORDER: Style = Style::new().white().bold();
   const STYLE_BLOCK_TITLE: Style = Style::new().dark_gray();
-  const TITLE_GOALS: &str = "Goals";
-  const TITLE_HOVER_INFO: &str = "Hover Info";
-  const TITLE_MESSAGES: &str = "Messages";
-  const TURNSTILE: &str = "⊢ ";
 
-  pub fn new(widget_set_builder: &WidgetSetBuilder) -> Self {
-    let goals = Self::new_goals(widget_set_builder);
-    let hover_info = Self::new_hover_info(widget_set_builder);
-    let messages = Self::new_messages(widget_set_builder);
+  pub fn new(title: &str, lines: Vec<Line<'static>>) -> Self {
+    let block = Self::create_block(title);
+    let mut scroll_view_state = Self::SCROLL_VIEW_STATE;
+
+    scroll_view_state.set_latest_content_size(lines.content_size());
 
     Self {
-      goals,
-      hover_info,
-      messages,
+      lines,
+      block,
+      scroll_view_state,
     }
   }
 
-  fn block(title: &str) -> Block<'static> {
+  fn create_block(title: &str) -> Block<'static> {
     let title = std::format!(" {title} ")
       .convert::<Line>()
       .centered()
@@ -74,14 +48,64 @@ impl WidgetSet {
 
     Block::bordered().border_style(Self::STYLE_BLOCK_BORDER).title(title)
   }
+}
 
-  fn scroll_view(title: &str, lines: Vec<Line<'static>>) -> ScrollView {
-    let block = Self::block(title);
-    let mut scroll_view = ScrollView::new(lines);
+impl ScrollView for View {
+  fn scroll_view_state_mut(&mut self) -> &mut ScrollViewState {
+    &mut self.scroll_view_state
+  }
 
-    scroll_view.set_block(block);
+  fn content_area(&self, scroll_view_area: Rect) -> Rect {
+    scroll_view_area.inner(Self::CONTENT_AREA_MARGIN)
+  }
 
-    scroll_view
+  fn render_content(&self, frame: &mut Frame, content_area: Rect) {
+    let scroll_offset = self.scroll_view_state.scroll_offset();
+    let rows = scroll_offset.y.range_from_len(content_area.height.into());
+    let cols = scroll_offset.x.range_from_len(content_area.width.into());
+    let line_and_row_area_pairs = self.lines[rows.clamp()].iter().zip(content_area.rows());
+
+    for (line, row_area) in line_and_row_area_pairs {
+      line.subline(cols.clone()).render_to(frame, row_area);
+    }
+  }
+
+  fn render_misc(&self, frame: &mut Frame, scroll_view_area: Rect) {
+    self.block.ref_immut().render_to(frame, scroll_view_area);
+  }
+
+  fn scroll_bar_style(&self) -> Style {
+    Self::STYLE_BLOCK_BORDER
+  }
+}
+
+#[derive(MutGetters)]
+#[get_mut = "pub"]
+pub struct WidgetSet {
+  goals: View,
+  hover_info: View,
+  messages: View,
+}
+
+impl WidgetSet {
+  const MESSAGE_NO_GOALS: &str = "No goals";
+  const MESSAGE_NO_HOVER: &str = "No information available";
+  const MESSAGE_NO_MESSAGE: &str = "No messages";
+  const TITLE_GOALS: &str = "Goals";
+  const TITLE_HOVER_INFO: &str = "Hover Info";
+  const TITLE_MESSAGES: &str = "Messages";
+  const TURNSTILE: &str = "⊢ ";
+
+  pub fn new(widget_set_builder: &WidgetSetBuilder) -> Self {
+    let goals = Self::create_goals_view(widget_set_builder);
+    let hover_info = Self::create_hover_info_view(widget_set_builder);
+    let messages = Self::create_messages_view(widget_set_builder);
+
+    Self {
+      goals,
+      hover_info,
+      messages,
+    }
   }
 
   fn hypothesis_line(line: &str) -> Line<'static> {
@@ -103,7 +127,7 @@ impl WidgetSet {
     }
   }
 
-  fn goal_lines(widget_set_builder: &WidgetSetBuilder) -> Vec<Line<'static>> {
+  fn goals_view_lines(widget_set_builder: &WidgetSetBuilder) -> Vec<Line<'static>> {
     let Some(plain_goals) = &widget_set_builder.plain_goals() else {
       return Self::MESSAGE_NO_GOALS.dim().convert::<Line>().singleton();
     };
@@ -136,13 +160,13 @@ impl WidgetSet {
     lines
   }
 
-  fn new_goals(widget_set_builder: &WidgetSetBuilder) -> ScrollView {
-    let lines = Self::goal_lines(widget_set_builder);
+  fn create_goals_view(widget_set_builder: &WidgetSetBuilder) -> View {
+    let lines = Self::goals_view_lines(widget_set_builder);
 
-    Self::scroll_view(Self::TITLE_GOALS, lines)
+    View::new(Self::TITLE_GOALS, lines)
   }
 
-  fn hover_lines(widget_set_builder: &WidgetSetBuilder) -> Vec<Line<'static>> {
+  fn hover_info_lines(widget_set_builder: &WidgetSetBuilder) -> Vec<Line<'static>> {
     if let Some(hover_file_result) = &widget_set_builder.hover_file_result() {
       hover_file_result.contents.value.lines().map(Self::goal_line).collect()
     } else {
@@ -150,10 +174,10 @@ impl WidgetSet {
     }
   }
 
-  fn new_hover_info(widget_set_builder: &WidgetSetBuilder) -> ScrollView {
-    let lines = Self::hover_lines(widget_set_builder);
+  fn create_hover_info_view(widget_set_builder: &WidgetSetBuilder) -> View {
+    let lines = Self::hover_info_lines(widget_set_builder);
 
-    Self::scroll_view(Self::TITLE_HOVER_INFO, lines)
+    View::new(Self::TITLE_HOVER_INFO, lines)
   }
 
   fn push_message_lines(
@@ -215,9 +239,9 @@ impl WidgetSet {
     lines
   }
 
-  fn new_messages(widget_set_builder: &WidgetSetBuilder) -> ScrollView {
+  fn create_messages_view(widget_set_builder: &WidgetSetBuilder) -> View {
     let lines = Self::message_lines(widget_set_builder);
 
-    Self::scroll_view(Self::TITLE_MESSAGES, lines)
+    View::new(Self::TITLE_MESSAGES, lines)
   }
 }

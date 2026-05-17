@@ -27,12 +27,12 @@ impl TuiSet {
     ().ok()
   }
 
-  pub fn on_tui_event(&mut self, tui_event: TuiEvent) -> Result<(), AnyhowError> {
+  pub fn on_tui_event(&mut self, tui_event: TuiEvent, widget_set: &mut WidgetSet) -> Result<(), AnyhowError> {
     let unit_output = self
       .tuis
       .get_mut(tui_event.index)
       .check_present()?
-      .on_event(tui_event.event);
+      .on_event(tui_event.event, widget_set);
     let Some(unit_res) = unit_output.into_end() else { return ().ok() };
 
     self.tuis.remove(tui_event.index);
@@ -55,12 +55,12 @@ impl TuiSet {
       .await
   }
 
-  pub async fn render(&mut self, widget_set: &WidgetSet) -> Result<(), AnyhowError> {
-    self
-      .tuis
-      .iter_mut()
-      .map(|tui| tui.render(widget_set))
-      .try_join_all()
-      .await
+  pub async fn render(&mut self, widget_set: &mut WidgetSet) -> Result<(), AnyhowError> {
+    // NOTE-ff2f17
+    for tui in &mut self.tuis {
+      tui.render(widget_set).await?;
+    }
+
+    ().ok()
   }
 }

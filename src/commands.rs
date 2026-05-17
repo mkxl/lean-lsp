@@ -145,11 +145,11 @@ pub struct TuiCommand {
 }
 
 #[derive(Debug, Deserialize, From, FromChain, Serialize, Subcommand)]
-#[from(ChangeFileCommand, FileCommand)]
-#[from(CloseFileCommand, FileCommand)]
-#[from(HoverFileCommand, FileCommand)]
-#[from(OpenFileCommand, FileCommand)]
-#[from(GetPlainGoalsCommand, InfoViewCommand)]
+#[from_chain(ChangeFileCommand, FileCommand)]
+#[from_chain(CloseFileCommand, FileCommand)]
+#[from_chain(HoverFileCommand, FileCommand)]
+#[from_chain(OpenFileCommand, FileCommand)]
+#[from_chain(GetPlainGoalsCommand, InfoViewCommand)]
 pub enum Command {
   #[command(subcommand)]
   File(FileCommand),

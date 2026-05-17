@@ -19,7 +19,7 @@ derive_more = { version = "2.0.1", features = ["constructor", "debug", "display"
 enum-assoc = "1.2.4"
 futures = "0.3.31"
 getset = "0.1.6"
-mkutils = { version = "0.1.81", features = ["async", "fmt", "fs", "mkutils-macros", "process", "serde", "socket", "tracing", "tui"] }
+mkutils = { version = "0.1.133", features = ["async", "serde", "tracing", "tui", "unstable"] }
 ratatui = { version = "0.30.0", features = ["crossterm", "unstable-backend-writer"] }
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.145"

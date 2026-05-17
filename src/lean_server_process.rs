@@ -133,7 +133,7 @@ impl LeanServerProcess {
   }
 
   pub async fn send<T: Serialize>(&mut self, value: T) -> Result<(), AnyhowError> {
-    let json_byte_str = value.to_json_byte_str()?;
+    let json_byte_str = value.to_json_bytes()?;
     let content_length_byte_str = json_byte_str.len().to_string().into_bytes();
 
     self.stdin.write_all(Self::CONTENT_LENGTH_HEADER_PREFIX).await?;
