@@ -1184,6 +1184,7 @@ dependencies = [
  "enum-assoc",
  "futures",
  "getset",
+ "indoc",
  "mkutils",
  "ratatui",
  "serde",
