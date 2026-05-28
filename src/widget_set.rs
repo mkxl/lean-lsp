@@ -10,6 +10,7 @@ use ratatui::{
   widgets::Block,
 };
 use tree_sitter_highlight::{Highlight, HighlightConfiguration, HighlightEvent, Highlighter};
+use tree_sitter_lean4 as lean4;
 use tree_sitter_md::{
   HIGHLIGHT_QUERY_BLOCK, HIGHLIGHT_QUERY_INLINE, INJECTION_QUERY_BLOCK, INJECTION_QUERY_INLINE, INLINE_LANGUAGE,
   LANGUAGE,
@@ -20,17 +21,78 @@ use crate::{
   widget_set_builder::WidgetSetBuilder,
 };
 
-const HIGHLIGHT_NAMES: [&str; 12] = [
+const LEAN_HIGHLIGHT_QUERY: &str = r"
+(comment) @comment
+
+[
+  (string)
+  (interpolated_string)
+  (char)
+] @string
+
+[
+  (number)
+  (float)
+] @number
+
+[
+  (abbrev)
+  (axiom)
+  (by)
+  (class)
+  (constant)
+  (def)
+  (do)
+  (else)
+  (end)
+  (example)
+  (forall)
+  (fun)
+  (have)
+  (if)
+  (import)
+  (inductive)
+  (instance)
+  (lemma)
+  (let)
+  (namespace)
+  (opaque)
+  (open)
+  (return)
+  (section)
+  (show)
+  (sorry)
+  (structure)
+  (then)
+  (theorem)
+  (try)
+  (variable)
+  (where)
+  (with)
+] @keyword
+
+((definition name: (identifier) @function))
+((inductive name: (identifier) @type))
+((structure name: (identifier) @type))
+";
+
+const HIGHLIGHT_NAMES: [&str; 18] = [
   "none",
+  "comment",
+  "function",
+  "keyword",
+  "number",
   "punctuation.delimiter",
   "punctuation.special",
   "string.escape",
+  "string",
   "text.emphasis",
   "text.literal",
   "text.reference",
   "text.strong",
   "text.title",
   "text.uri",
+  "type",
   "markup.raw",
   "markup.raw.block",
 ];
@@ -63,6 +125,17 @@ static MARKDOWN_INLINE_HIGHLIGHT_CONFIG: LazyLock<HighlightConfiguration> = Lazy
     "",
   )
   .expect("markdown inline highlight query should be valid");
+
+  config.configure(&HIGHLIGHT_NAMES);
+
+  config
+});
+
+// Lean code fences inside markdown are injected into this grammar when the info
+// string is `lean` or `lean4`.
+static LEAN_HIGHLIGHT_CONFIG: LazyLock<HighlightConfiguration> = LazyLock::new(|| {
+  let mut config = HighlightConfiguration::new(lean4::language(), "lean", LEAN_HIGHLIGHT_QUERY, "", "")
+    .expect("lean highlight query should be valid");
 
   config.configure(&HIGHLIGHT_NAMES);
 
@@ -224,14 +297,16 @@ impl WidgetSet {
 
   const fn tree_sitter_highlight_style(highlight: Highlight) -> Style {
     match highlight.0 {
-      1 | 2 => Style::new().dark_gray(),
-      3 => Style::new().magenta(),
-      4 => Style::new().white().italic(),
-      5 | 10 | 11 => Style::new().yellow(),
-      6 => Style::new().green(),
-      7 => Style::new().white().bold(),
-      8 => Style::new().cyan().bold(),
-      9 => Style::new().blue().underlined(),
+      1 => Style::new().dark_gray().italic(),
+      2 | 11 => Style::new().green(),
+      3 | 7 => Style::new().magenta(),
+      4 => Style::new().cyan(),
+      5 | 6 => Style::new().dark_gray(),
+      8 | 10 | 16 => Style::new().yellow(),
+      9 => Style::new().white().italic(),
+      12 => Style::new().white().bold(),
+      13 | 15 => Style::new().cyan().bold(),
+      14 => Style::new().blue().underlined(),
       _ => Style::new().white(),
     }
   }
@@ -251,9 +326,16 @@ impl WidgetSet {
 
   fn markdown_lines(value: &str) -> Vec<Line<'static>> {
     let mut highlighter = Highlighter::new();
-    let Ok(events) = highlighter.highlight(&MARKDOWN_HIGHLIGHT_CONFIG, value.as_bytes(), None, |language| {
-      (language == "markdown_inline").then_some(&*MARKDOWN_INLINE_HIGHLIGHT_CONFIG)
-    }) else {
+    let Ok(events) = highlighter.highlight(
+      &MARKDOWN_HIGHLIGHT_CONFIG,
+      value.as_bytes(),
+      None,
+      |language| match language {
+        "markdown_inline" => Some(&*MARKDOWN_INLINE_HIGHLIGHT_CONFIG),
+        "lean" | "lean4" => Some(&*LEAN_HIGHLIGHT_CONFIG),
+        _ => None,
+      },
+    ) else {
       return value.lines().map(|line| line.to_owned().white().into()).collect();
     };
     let mut lines = Vec::new();
