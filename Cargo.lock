@@ -89,6 +89,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "arborium-lean"
+version = "2.17.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9667c968893459e61a7e4532f6aa4e8665f4de6996369f8d6f9c442cb364c8a0"
+dependencies = [
+ "arborium-sysroot",
+ "cc",
+ "tree-sitter-language",
+]
+
+[[package]]
+name = "arborium-sysroot"
+version = "2.17.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "260e0358abe4ede3af8b4df7a311bc9b6e4a60e4bd50af16deddfcd13759a908"
+dependencies = [
+ "cc",
+ "dlmalloc",
+]
+
+[[package]]
 name = "arrayvec"
 version = "0.7.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -625,6 +646,17 @@ dependencies = [
  "libc",
  "option-ext",
  "redox_users",
+ "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "dlmalloc"
+version = "0.2.14"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ad5208a115eaba24916f7456929832e310a81518c641f93fee4f89aa93aa3675"
+dependencies = [
+ "cfg-if",
+ "libc",
  "windows-sys 0.61.2",
 ]
 
@@ -1176,6 +1208,7 @@ name = "lean-lsp"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "arborium-lean",
  "bytes",
  "camino",
  "clap",
@@ -1184,7 +1217,6 @@ dependencies = [
  "enum-assoc",
  "futures",
  "getset",
- "indoc",
  "mkutils",
  "ratatui",
  "serde",
@@ -1197,7 +1229,6 @@ dependencies = [
  "tracing-subscriber",
  "tree-sitter",
  "tree-sitter-highlight",
- "tree-sitter-lean4",
  "tree-sitter-md-025",
  "ulid",
 ]
@@ -2853,16 +2884,6 @@ name = "tree-sitter-language"
 version = "0.1.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "009994f150cc0cd50ff54917d5bc8bffe8cad10ca10d81c34da2ec421ae61782"
-
-[[package]]
-name = "tree-sitter-lean4"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5e4754e1403ae141b9e66c49c0374f09f87122f6b03c41c624c84ab890966d8a"
-dependencies = [
- "cc",
- "tree-sitter",
-]
 
 [[package]]
 name = "tree-sitter-md-025"

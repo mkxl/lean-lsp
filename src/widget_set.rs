@@ -1,5 +1,6 @@
 use std::{ops::Range, sync::LazyLock};
 
+use arborium_lean as lean;
 use getset::{Getters, MutGetters};
 use mkutils::{Rope, ScrollView, ScrollViewState, ScrollWhen, Utils};
 use ratatui::{
@@ -10,7 +11,6 @@ use ratatui::{
   widgets::Block,
 };
 use tree_sitter_highlight::{Highlight, HighlightConfiguration, HighlightEvent, Highlighter};
-use tree_sitter_lean4 as lean4;
 use tree_sitter_md::{
   HIGHLIGHT_QUERY_BLOCK, HIGHLIGHT_QUERY_INLINE, INJECTION_QUERY_BLOCK, INJECTION_QUERY_INLINE, INLINE_LANGUAGE,
   LANGUAGE,
@@ -18,11 +18,11 @@ use tree_sitter_md::{
 
 use crate::{
   highlight_queries::{
-    HIGHLIGHT_COMMENT, HIGHLIGHT_FUNCTION, HIGHLIGHT_KEYWORD, HIGHLIGHT_MARKUP_RAW, HIGHLIGHT_MARKUP_RAW_BLOCK,
-    HIGHLIGHT_NAMES, HIGHLIGHT_NUMBER, HIGHLIGHT_PUNCTUATION_DELIMITER, HIGHLIGHT_PUNCTUATION_SPECIAL,
-    HIGHLIGHT_STRING, HIGHLIGHT_STRING_ESCAPE, HIGHLIGHT_TEXT_EMPHASIS, HIGHLIGHT_TEXT_LITERAL,
-    HIGHLIGHT_TEXT_REFERENCE, HIGHLIGHT_TEXT_STRONG, HIGHLIGHT_TEXT_TITLE, HIGHLIGHT_TEXT_URI, HIGHLIGHT_TYPE,
-    LEAN_HIGHLIGHT_QUERY,
+    HIGHLIGHT_ATTRIBUTE, HIGHLIGHT_CHARACTER, HIGHLIGHT_COMMENT, HIGHLIGHT_CONSTANT, HIGHLIGHT_CONSTRUCTOR,
+    HIGHLIGHT_FUNCTION, HIGHLIGHT_KEYWORD, HIGHLIGHT_MARKUP_RAW, HIGHLIGHT_NAMES, HIGHLIGHT_NUMBER, HIGHLIGHT_OPERATOR,
+    HIGHLIGHT_PROPERTY, HIGHLIGHT_PUNCTUATION, HIGHLIGHT_STRING, HIGHLIGHT_STRING_ESCAPE, HIGHLIGHT_TEXT_EMPHASIS,
+    HIGHLIGHT_TEXT_LITERAL, HIGHLIGHT_TEXT_REFERENCE, HIGHLIGHT_TEXT_STRONG, HIGHLIGHT_TEXT_TITLE, HIGHLIGHT_TEXT_URI,
+    HIGHLIGHT_TYPE, HIGHLIGHT_WARNING,
   },
   types::{Position, Severity, Utf16},
   widget_set_builder::WidgetSetBuilder,
@@ -65,8 +65,14 @@ static MARKDOWN_INLINE_HIGHLIGHT_CONFIG: LazyLock<HighlightConfiguration> = Lazy
 // Lean code fences inside markdown are injected into this grammar when the info
 // string is `lean` or `lean4`.
 static LEAN_HIGHLIGHT_CONFIG: LazyLock<HighlightConfiguration> = LazyLock::new(|| {
-  let mut config = HighlightConfiguration::new(lean4::language(), "lean", LEAN_HIGHLIGHT_QUERY, "", "")
-    .expect("lean highlight query should be valid");
+  let mut config = HighlightConfiguration::new(
+    lean::language().into(),
+    "lean",
+    lean::HIGHLIGHTS_QUERY,
+    lean::INJECTIONS_QUERY,
+    lean::LOCALS_QUERY,
+  )
+  .expect("lean highlight query should be valid");
 
   config.configure(&HIGHLIGHT_NAMES);
 
@@ -292,18 +298,18 @@ impl WidgetSet {
 
   const fn tree_sitter_highlight_style(highlight: Highlight) -> Style {
     match highlight.0 {
+      HIGHLIGHT_ATTRIBUTE | HIGHLIGHT_PROPERTY => Style::new().blue(),
+      HIGHLIGHT_CHARACTER | HIGHLIGHT_STRING | HIGHLIGHT_TEXT_LITERAL | HIGHLIGHT_MARKUP_RAW => Style::new().yellow(),
       HIGHLIGHT_COMMENT => Style::new().dark_gray().italic(),
-      HIGHLIGHT_FUNCTION | HIGHLIGHT_TEXT_REFERENCE => Style::new().green(),
+      HIGHLIGHT_CONSTANT | HIGHLIGHT_NUMBER => Style::new().cyan(),
+      HIGHLIGHT_CONSTRUCTOR | HIGHLIGHT_FUNCTION | HIGHLIGHT_TEXT_REFERENCE => Style::new().green(),
       HIGHLIGHT_KEYWORD | HIGHLIGHT_STRING_ESCAPE => Style::new().magenta(),
-      HIGHLIGHT_NUMBER => Style::new().cyan(),
-      HIGHLIGHT_PUNCTUATION_DELIMITER | HIGHLIGHT_PUNCTUATION_SPECIAL => Style::new().dark_gray(),
-      HIGHLIGHT_STRING | HIGHLIGHT_TEXT_LITERAL | HIGHLIGHT_MARKUP_RAW | HIGHLIGHT_MARKUP_RAW_BLOCK => {
-        Style::new().yellow()
-      }
+      HIGHLIGHT_OPERATOR | HIGHLIGHT_PUNCTUATION => Style::new().dark_gray(),
       HIGHLIGHT_TEXT_EMPHASIS => Style::new().white().italic(),
       HIGHLIGHT_TEXT_STRONG => Style::new().white().bold(),
       HIGHLIGHT_TEXT_TITLE | HIGHLIGHT_TYPE => Style::new().cyan().bold(),
       HIGHLIGHT_TEXT_URI => Style::new().blue().underlined(),
+      HIGHLIGHT_WARNING => Style::new().yellow().bold(),
       _ => Style::new().white(),
     }
   }
