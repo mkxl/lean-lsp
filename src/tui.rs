@@ -44,7 +44,7 @@ impl Tui {
   const SCROLL_COUNT: usize = 1;
 
   pub fn new(socket: Socket, tui_command: &TuiCommand) -> Result<Self, IoError> {
-    let terminal = Terminal::new(tui_command.size)?;
+    let terminal = Terminal::new(tui_command.size, false)?;
     let latest_area_set = AreaSet::new(Rect::ZERO);
     let tui = Self {
       socket,

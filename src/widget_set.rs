@@ -1,7 +1,7 @@
-use std::sync::LazyLock;
+use std::{ops::Range, sync::LazyLock};
 
 use getset::{Getters, MutGetters};
-use mkutils::{ScrollView, ScrollViewState, ScrollWhen, Utils};
+use mkutils::{Rope, ScrollView, ScrollViewState, ScrollWhen, Utils};
 use ratatui::{
   Frame,
   layout::{Margin, Rect},
@@ -67,6 +67,64 @@ static LEAN_HIGHLIGHT_CONFIG: LazyLock<HighlightConfiguration> = LazyLock::new(|
   config
 });
 
+struct MarkdownSource<'a> {
+  source: &'a str,
+  rope: Rope,
+  line_index: usize,
+  line_end_byte: usize,
+}
+
+impl<'a> MarkdownSource<'a> {
+  fn new(source: &'a str) -> Self {
+    let rope = Rope::from(source);
+    let line_index = 0;
+    let line_end_byte = Self::line_end_byte(&rope, line_index, source.len());
+
+    Self {
+      source,
+      rope,
+      line_index,
+      line_end_byte,
+    }
+  }
+
+  fn line_end_byte(rope: &Rope, line_index: usize, source_len: usize) -> usize {
+    rope.line_info(line_index).map_or(source_len, |(offset, summary)| {
+      offset.length.bytes.saturating_add(summary.length.bytes)
+    })
+  }
+
+  fn advance_line(&mut self) {
+    self.line_index = self.line_index.incremented();
+    self.line_end_byte = Self::line_end_byte(&self.rope, self.line_index, self.source.len());
+  }
+
+  fn push_range(
+    &mut self,
+    lines: &mut Vec<Line<'static>>,
+    spans: &mut Vec<Span<'static>>,
+    range: Range<usize>,
+    style: Style,
+  ) {
+    let mut start = range.start;
+
+    while start < range.end {
+      let end = range.end.min(self.line_end_byte);
+      let segment = &self.source[start..end];
+
+      if let Some(line_segment) = segment.strip_suffix('\n') {
+        spans.push(Span::styled(line_segment.to_owned(), style));
+        lines.push(std::mem::take(spans).into());
+        self.advance_line();
+      } else {
+        spans.push(Span::styled(segment.to_owned(), style));
+      }
+
+      start = end;
+    }
+  }
+}
+
 #[derive(Getters)]
 #[get = "pub"]
 pub struct View {
@@ -77,7 +135,7 @@ pub struct View {
 
 impl View {
   const CONTENT_AREA_MARGIN: Margin = Margin::new(1, 1);
-  const SCROLL_VIEW_STATE: ScrollViewState = ScrollViewState::new(ScrollWhen::ForLargeContent);
+  const SCROLL_VIEW_STATE: ScrollViewState = ScrollViewState::new(ScrollWhen::ForLargeContent, None);
   const STYLE_BLOCK_BORDER: Style = Style::new().white().bold();
   const STYLE_BLOCK_TITLE: Style = Style::new().dark_gray();
 
@@ -105,6 +163,10 @@ impl View {
 }
 
 impl ScrollView for View {
+  fn scroll_view_state(&self) -> &ScrollViewState {
+    &self.scroll_view_state
+  }
+
   fn scroll_view_state_mut(&mut self) -> &mut ScrollViewState {
     &mut self.scroll_view_state
   }
@@ -236,19 +298,6 @@ impl WidgetSet {
     }
   }
 
-  fn push_markdown_source(lines: &mut Vec<Line<'static>>, spans: &mut Vec<Span<'static>>, source: &str, style: Style) {
-    for segment in source.split_inclusive('\n') {
-      let Some(line_segment) = segment.strip_suffix('\n') else {
-        spans.push(Span::styled(segment.to_owned(), style));
-
-        continue;
-      };
-
-      spans.push(Span::styled(line_segment.to_owned(), style));
-      lines.push(std::mem::take(spans).into());
-    }
-  }
-
   fn markdown_lines(value: &str) -> Vec<Line<'static>> {
     let mut highlighter = Highlighter::new();
     let Ok(events) = highlighter.highlight(
@@ -265,16 +314,18 @@ impl WidgetSet {
     };
     let mut lines = Vec::new();
     let mut spans = Vec::new();
+    let mut source = MarkdownSource::new(value);
     let mut style_stack = vec![Style::new().white()];
 
     // Highlight events are byte ranges plus start/end markers. Track the active
-    // style stack and split source ranges back into ratatui lines.
+    // style stack and use rope byte offsets to split ranges back into ratatui
+    // lines at the same byte boundaries Tree-sitter reports.
     for event in events.flatten() {
       match event {
         HighlightEvent::Source { start, end } => {
           let style = style_stack.last().copied().unwrap_or_else(Style::new);
 
-          Self::push_markdown_source(&mut lines, &mut spans, &value[start..end], style);
+          source.push_range(&mut lines, &mut spans, start..end, style);
         }
         HighlightEvent::HighlightStart(highlight) => style_stack.push(Self::tree_sitter_highlight_style(highlight)),
         HighlightEvent::HighlightEnd => {
