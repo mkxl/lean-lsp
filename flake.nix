@@ -6,10 +6,7 @@
     url = "github:nix-community/fenix/monthly";
     inputs.nixpkgs.follows = "nixpkgs";
   };
-  inputs.crane = {
-    url = "github:ipetkov/crane";
-    inputs.nixpkgs.follows = "nixpkgs";
-  };
+  inputs.crane.url = "github:ipetkov/crane";
 
   outputs =
     {
