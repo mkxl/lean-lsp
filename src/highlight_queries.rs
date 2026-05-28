@@ -75,3 +75,21 @@ pub const HIGHLIGHT_NAMES: [&str; 18] = [
   "markup.raw",
   "markup.raw.block",
 ];
+
+pub const HIGHLIGHT_COMMENT: usize = 1;
+pub const HIGHLIGHT_FUNCTION: usize = 2;
+pub const HIGHLIGHT_KEYWORD: usize = 3;
+pub const HIGHLIGHT_NUMBER: usize = 4;
+pub const HIGHLIGHT_PUNCTUATION_DELIMITER: usize = 5;
+pub const HIGHLIGHT_PUNCTUATION_SPECIAL: usize = 6;
+pub const HIGHLIGHT_STRING_ESCAPE: usize = 7;
+pub const HIGHLIGHT_STRING: usize = 8;
+pub const HIGHLIGHT_TEXT_EMPHASIS: usize = 9;
+pub const HIGHLIGHT_TEXT_LITERAL: usize = 10;
+pub const HIGHLIGHT_TEXT_REFERENCE: usize = 11;
+pub const HIGHLIGHT_TEXT_STRONG: usize = 12;
+pub const HIGHLIGHT_TEXT_TITLE: usize = 13;
+pub const HIGHLIGHT_TEXT_URI: usize = 14;
+pub const HIGHLIGHT_TYPE: usize = 15;
+pub const HIGHLIGHT_MARKUP_RAW: usize = 16;
+pub const HIGHLIGHT_MARKUP_RAW_BLOCK: usize = 17;

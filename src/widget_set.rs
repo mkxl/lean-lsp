@@ -17,7 +17,13 @@ use tree_sitter_md::{
 };
 
 use crate::{
-  highlight_queries::{HIGHLIGHT_NAMES, LEAN_HIGHLIGHT_QUERY},
+  highlight_queries::{
+    HIGHLIGHT_COMMENT, HIGHLIGHT_FUNCTION, HIGHLIGHT_KEYWORD, HIGHLIGHT_MARKUP_RAW, HIGHLIGHT_MARKUP_RAW_BLOCK,
+    HIGHLIGHT_NAMES, HIGHLIGHT_NUMBER, HIGHLIGHT_PUNCTUATION_DELIMITER, HIGHLIGHT_PUNCTUATION_SPECIAL,
+    HIGHLIGHT_STRING, HIGHLIGHT_STRING_ESCAPE, HIGHLIGHT_TEXT_EMPHASIS, HIGHLIGHT_TEXT_LITERAL,
+    HIGHLIGHT_TEXT_REFERENCE, HIGHLIGHT_TEXT_STRONG, HIGHLIGHT_TEXT_TITLE, HIGHLIGHT_TEXT_URI, HIGHLIGHT_TYPE,
+    LEAN_HIGHLIGHT_QUERY,
+  },
   types::{Position, Severity, Utf16},
   widget_set_builder::WidgetSetBuilder,
 };
@@ -286,16 +292,18 @@ impl WidgetSet {
 
   const fn tree_sitter_highlight_style(highlight: Highlight) -> Style {
     match highlight.0 {
-      1 => Style::new().dark_gray().italic(),
-      2 | 11 => Style::new().green(),
-      3 | 7 => Style::new().magenta(),
-      4 => Style::new().cyan(),
-      5 | 6 => Style::new().dark_gray(),
-      8 | 10 | 16 => Style::new().yellow(),
-      9 => Style::new().white().italic(),
-      12 => Style::new().white().bold(),
-      13 | 15 => Style::new().cyan().bold(),
-      14 => Style::new().blue().underlined(),
+      HIGHLIGHT_COMMENT => Style::new().dark_gray().italic(),
+      HIGHLIGHT_FUNCTION | HIGHLIGHT_TEXT_REFERENCE => Style::new().green(),
+      HIGHLIGHT_KEYWORD | HIGHLIGHT_STRING_ESCAPE => Style::new().magenta(),
+      HIGHLIGHT_NUMBER => Style::new().cyan(),
+      HIGHLIGHT_PUNCTUATION_DELIMITER | HIGHLIGHT_PUNCTUATION_SPECIAL => Style::new().dark_gray(),
+      HIGHLIGHT_STRING | HIGHLIGHT_TEXT_LITERAL | HIGHLIGHT_MARKUP_RAW | HIGHLIGHT_MARKUP_RAW_BLOCK => {
+        Style::new().yellow()
+      }
+      HIGHLIGHT_TEXT_EMPHASIS => Style::new().white().italic(),
+      HIGHLIGHT_TEXT_STRONG => Style::new().white().bold(),
+      HIGHLIGHT_TEXT_TITLE | HIGHLIGHT_TYPE => Style::new().cyan().bold(),
+      HIGHLIGHT_TEXT_URI => Style::new().blue().underlined(),
       _ => Style::new().white(),
     }
   }
