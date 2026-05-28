@@ -41,10 +41,11 @@ pub struct Tui {
 }
 
 impl Tui {
+  const FORCE_FULL_REDRAWS: bool = false;
   const SCROLL_COUNT: usize = 1;
 
   pub fn new(socket: Socket, tui_command: &TuiCommand) -> Result<Self, IoError> {
-    let terminal = Terminal::new(tui_command.size, false)?;
+    let terminal = Terminal::new(tui_command.size, Self::FORCE_FULL_REDRAWS)?;
     let latest_area_set = AreaSet::new(Rect::ZERO);
     let tui = Self {
       socket,

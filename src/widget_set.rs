@@ -135,7 +135,9 @@ pub struct View {
 
 impl View {
   const CONTENT_AREA_MARGIN: Margin = Margin::new(1, 1);
-  const SCROLL_VIEW_STATE: ScrollViewState = ScrollViewState::new(ScrollWhen::ForLargeContent, None);
+  const RENDER_SCROLL_BARS_TIMEOUT: Option<std::time::Duration> = None;
+  const SCROLL_VIEW_STATE: ScrollViewState =
+    ScrollViewState::new(ScrollWhen::ForLargeContent, Self::RENDER_SCROLL_BARS_TIMEOUT);
   const STYLE_BLOCK_BORDER: Style = Style::new().white().bold();
   const STYLE_BLOCK_TITLE: Style = Style::new().dark_gray();
 
