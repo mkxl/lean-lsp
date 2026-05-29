@@ -1,21 +1,13 @@
 use std::sync::LazyLock;
 
-use arborium_lean as lean;
 use getset::{Getters, MutGetters};
-use mkutils::{
-  RatatuiTreeSitterHighlighter, ScrollView, ScrollViewState, ScrollWhen, TreeSitterHighlightConfig,
-  TreeSitterHighlightTheme, Utils,
-};
+use mkutils::{RatatuiTreeSitterHighlighter, ScrollView, ScrollViewState, ScrollWhen, TreeSitterHighlightTheme, Utils};
 use ratatui::{
   Frame,
   layout::{Margin, Rect},
   style::{Style, Styled, Stylize},
   text::Line,
   widgets::Block,
-};
-use tree_sitter_md::{
-  HIGHLIGHT_QUERY_BLOCK, HIGHLIGHT_QUERY_INLINE, INJECTION_QUERY_BLOCK, INJECTION_QUERY_INLINE, INLINE_LANGUAGE,
-  LANGUAGE,
 };
 
 use crate::{
@@ -47,38 +39,8 @@ static HOVER_HIGHLIGHTER: LazyLock<RatatuiTreeSitterHighlighter> = LazyLock::new
     .with_style("text.uri", Style::new().blue().underlined())
     .with_style("type", Style::new().cyan().bold())
     .with_style("warning", Style::new().yellow().bold());
-  let mut highlighter = RatatuiTreeSitterHighlighter::new(theme);
 
-  highlighter
-    .register_language(TreeSitterHighlightConfig::new(
-      "markdown",
-      LANGUAGE.into(),
-      HIGHLIGHT_QUERY_BLOCK,
-      INJECTION_QUERY_BLOCK,
-      "",
-    ))
-    .expect("markdown highlight config should be valid");
-  highlighter
-    .register_language(TreeSitterHighlightConfig::new(
-      "markdown_inline",
-      INLINE_LANGUAGE.into(),
-      HIGHLIGHT_QUERY_INLINE,
-      INJECTION_QUERY_INLINE,
-      "",
-    ))
-    .expect("markdown inline highlight config should be valid");
-  highlighter
-    .register_language(TreeSitterHighlightConfig::new(
-      "lean",
-      lean::language().into(),
-      lean::HIGHLIGHTS_QUERY,
-      lean::INJECTIONS_QUERY,
-      lean::LOCALS_QUERY,
-    ))
-    .expect("lean highlight config should be valid");
-  highlighter.alias_language("lean4", "lean");
-
-  highlighter
+  RatatuiTreeSitterHighlighter::new(theme)
 });
 
 #[derive(Getters)]
