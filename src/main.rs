@@ -3,7 +3,6 @@
 
 mod cli_args;
 mod commands;
-mod highlight_captures;
 mod lean_server_process;
 mod message;
 mod notification;

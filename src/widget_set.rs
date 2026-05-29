@@ -1,141 +1,85 @@
-use std::{ops::Range, sync::LazyLock};
+use std::sync::LazyLock;
 
 use arborium_lean as lean;
 use getset::{Getters, MutGetters};
-use mkutils::{Rope, ScrollView, ScrollViewState, ScrollWhen, Utils};
+use mkutils::{
+  RatatuiTreeSitterHighlighter, ScrollView, ScrollViewState, ScrollWhen, TreeSitterHighlightConfig,
+  TreeSitterHighlightTheme, Utils,
+};
 use ratatui::{
   Frame,
   layout::{Margin, Rect},
   style::{Style, Styled, Stylize},
-  text::{Line, Span},
+  text::Line,
   widgets::Block,
 };
-use tree_sitter_highlight::{Highlight, HighlightConfiguration, HighlightEvent, Highlighter};
 use tree_sitter_md::{
   HIGHLIGHT_QUERY_BLOCK, HIGHLIGHT_QUERY_INLINE, INJECTION_QUERY_BLOCK, INJECTION_QUERY_INLINE, INLINE_LANGUAGE,
   LANGUAGE,
 };
 
 use crate::{
-  highlight_captures::{
-    HIGHLIGHT_ATTRIBUTE, HIGHLIGHT_CHARACTER, HIGHLIGHT_COMMENT, HIGHLIGHT_CONSTANT, HIGHLIGHT_CONSTRUCTOR,
-    HIGHLIGHT_FUNCTION, HIGHLIGHT_KEYWORD, HIGHLIGHT_MARKUP_RAW, HIGHLIGHT_NAMES, HIGHLIGHT_NUMBER, HIGHLIGHT_OPERATOR,
-    HIGHLIGHT_PROPERTY, HIGHLIGHT_PUNCTUATION, HIGHLIGHT_STRING, HIGHLIGHT_STRING_ESCAPE, HIGHLIGHT_TEXT_EMPHASIS,
-    HIGHLIGHT_TEXT_LITERAL, HIGHLIGHT_TEXT_REFERENCE, HIGHLIGHT_TEXT_STRONG, HIGHLIGHT_TEXT_TITLE, HIGHLIGHT_TEXT_URI,
-    HIGHLIGHT_TYPE, HIGHLIGHT_WARNING,
-  },
   types::{Position, Severity, Utf16},
   widget_set_builder::WidgetSetBuilder,
 };
 
-// Tree-sitter highlight queries are compiled once, then reused by each hover
-// render.
-static MARKDOWN_HIGHLIGHT_CONFIG: LazyLock<HighlightConfiguration> = LazyLock::new(|| {
-  let mut config = HighlightConfiguration::new(
-    LANGUAGE.into(),
-    "markdown",
-    HIGHLIGHT_QUERY_BLOCK,
-    INJECTION_QUERY_BLOCK,
-    "",
-  )
-  .expect("markdown highlight query should be valid");
+static HOVER_HIGHLIGHTER: LazyLock<RatatuiTreeSitterHighlighter> = LazyLock::new(|| {
+  let theme = TreeSitterHighlightTheme::new(Style::new().white())
+    .with_style("attribute", Style::new().blue())
+    .with_style("character", Style::new().yellow())
+    .with_style("comment", Style::new().dark_gray().italic())
+    .with_style("constant", Style::new().cyan())
+    .with_style("constructor", Style::new().green())
+    .with_style("function", Style::new().green())
+    .with_style("keyword", Style::new().magenta())
+    .with_style("markup.raw", Style::new().yellow())
+    .with_style("number", Style::new().cyan())
+    .with_style("operator", Style::new().dark_gray())
+    .with_style("property", Style::new().blue())
+    .with_style("punctuation", Style::new().dark_gray())
+    .with_style("string", Style::new().yellow())
+    .with_style("string.escape", Style::new().magenta())
+    .with_style("text.emphasis", Style::new().white().italic())
+    .with_style("text.literal", Style::new().yellow())
+    .with_style("text.reference", Style::new().green())
+    .with_style("text.strong", Style::new().white().bold())
+    .with_style("text.title", Style::new().cyan().bold())
+    .with_style("text.uri", Style::new().blue().underlined())
+    .with_style("type", Style::new().cyan().bold())
+    .with_style("warning", Style::new().yellow().bold());
+  let mut highlighter = RatatuiTreeSitterHighlighter::new(theme);
 
-  config.configure(&HIGHLIGHT_NAMES);
+  highlighter
+    .register_language(TreeSitterHighlightConfig::new(
+      "markdown",
+      LANGUAGE.into(),
+      HIGHLIGHT_QUERY_BLOCK,
+      INJECTION_QUERY_BLOCK,
+      "",
+    ))
+    .expect("markdown highlight config should be valid");
+  highlighter
+    .register_language(TreeSitterHighlightConfig::new(
+      "markdown_inline",
+      INLINE_LANGUAGE.into(),
+      HIGHLIGHT_QUERY_INLINE,
+      INJECTION_QUERY_INLINE,
+      "",
+    ))
+    .expect("markdown inline highlight config should be valid");
+  highlighter
+    .register_language(TreeSitterHighlightConfig::new(
+      "lean",
+      lean::language().into(),
+      lean::HIGHLIGHTS_QUERY,
+      lean::INJECTIONS_QUERY,
+      lean::LOCALS_QUERY,
+    ))
+    .expect("lean highlight config should be valid");
+  highlighter.alias_language("lean4", "lean");
 
-  config
+  highlighter
 });
-
-// Inline markdown is a separate Tree-sitter grammar injected by the block
-// grammar.
-static MARKDOWN_INLINE_HIGHLIGHT_CONFIG: LazyLock<HighlightConfiguration> = LazyLock::new(|| {
-  let mut config = HighlightConfiguration::new(
-    INLINE_LANGUAGE.into(),
-    "markdown_inline",
-    HIGHLIGHT_QUERY_INLINE,
-    INJECTION_QUERY_INLINE,
-    "",
-  )
-  .expect("markdown inline highlight query should be valid");
-
-  config.configure(&HIGHLIGHT_NAMES);
-
-  config
-});
-
-// Lean code fences inside markdown are injected into this grammar when the info
-// string is `lean` or `lean4`.
-static LEAN_HIGHLIGHT_CONFIG: LazyLock<HighlightConfiguration> = LazyLock::new(|| {
-  let mut config = HighlightConfiguration::new(
-    lean::language().into(),
-    "lean",
-    lean::HIGHLIGHTS_QUERY,
-    lean::INJECTIONS_QUERY,
-    lean::LOCALS_QUERY,
-  )
-  .expect("lean highlight query should be valid");
-
-  config.configure(&HIGHLIGHT_NAMES);
-
-  config
-});
-
-struct MarkdownSource<'a> {
-  source: &'a str,
-  rope: Rope,
-  line_index: usize,
-  line_end_byte: usize,
-}
-
-impl<'a> MarkdownSource<'a> {
-  fn new(source: &'a str) -> Self {
-    let rope = Rope::from(source);
-    let line_index = 0;
-    let line_end_byte = Self::line_end_byte(&rope, line_index, source.len());
-
-    Self {
-      source,
-      rope,
-      line_index,
-      line_end_byte,
-    }
-  }
-
-  fn line_end_byte(rope: &Rope, line_index: usize, source_len: usize) -> usize {
-    rope.line_info(line_index).map_or(source_len, |(offset, summary)| {
-      offset.length.bytes.saturating_add(summary.length.bytes)
-    })
-  }
-
-  fn advance_line(&mut self) {
-    self.line_index = self.line_index.incremented();
-    self.line_end_byte = Self::line_end_byte(&self.rope, self.line_index, self.source.len());
-  }
-
-  fn push_range(
-    &mut self,
-    lines: &mut Vec<Line<'static>>,
-    spans: &mut Vec<Span<'static>>,
-    range: Range<usize>,
-    style: Style,
-  ) {
-    let mut start = range.start;
-
-    while start < range.end {
-      let end = range.end.min(self.line_end_byte);
-      let segment = &self.source[start..end];
-
-      if let Some(line_segment) = segment.strip_suffix('\n') {
-        spans.push(Span::styled(line_segment.to_owned(), style));
-        lines.push(std::mem::take(spans).into());
-        self.advance_line();
-      } else {
-        spans.push(Span::styled(segment.to_owned(), style));
-      }
-
-      start = end;
-    }
-  }
-}
 
 #[derive(Getters)]
 #[get = "pub"]
@@ -296,65 +240,10 @@ impl WidgetSet {
     View::new(Self::TITLE_GOALS, lines)
   }
 
-  const fn tree_sitter_highlight_style(highlight: Highlight) -> Style {
-    match highlight.0 {
-      HIGHLIGHT_ATTRIBUTE | HIGHLIGHT_PROPERTY => Style::new().blue(),
-      HIGHLIGHT_CHARACTER | HIGHLIGHT_STRING | HIGHLIGHT_TEXT_LITERAL | HIGHLIGHT_MARKUP_RAW => Style::new().yellow(),
-      HIGHLIGHT_COMMENT => Style::new().dark_gray().italic(),
-      HIGHLIGHT_CONSTANT | HIGHLIGHT_NUMBER => Style::new().cyan(),
-      HIGHLIGHT_CONSTRUCTOR | HIGHLIGHT_FUNCTION | HIGHLIGHT_TEXT_REFERENCE => Style::new().green(),
-      HIGHLIGHT_KEYWORD | HIGHLIGHT_STRING_ESCAPE => Style::new().magenta(),
-      HIGHLIGHT_OPERATOR | HIGHLIGHT_PUNCTUATION => Style::new().dark_gray(),
-      HIGHLIGHT_TEXT_EMPHASIS => Style::new().white().italic(),
-      HIGHLIGHT_TEXT_STRONG => Style::new().white().bold(),
-      HIGHLIGHT_TEXT_TITLE | HIGHLIGHT_TYPE => Style::new().cyan().bold(),
-      HIGHLIGHT_TEXT_URI => Style::new().blue().underlined(),
-      HIGHLIGHT_WARNING => Style::new().yellow().bold(),
-      _ => Style::new().white(),
-    }
-  }
-
   fn markdown_lines(value: &str) -> Vec<Line<'static>> {
-    let mut highlighter = Highlighter::new();
-    let Ok(events) = highlighter.highlight(
-      &MARKDOWN_HIGHLIGHT_CONFIG,
-      value.as_bytes(),
-      None,
-      |language| match language {
-        "markdown_inline" => Some(&*MARKDOWN_INLINE_HIGHLIGHT_CONFIG),
-        "lean" | "lean4" => Some(&*LEAN_HIGHLIGHT_CONFIG),
-        _ => None,
-      },
-    ) else {
-      return value.lines().map(|line| line.to_owned().white().into()).collect();
-    };
-    let mut lines = Vec::new();
-    let mut spans = Vec::new();
-    let mut source = MarkdownSource::new(value);
-    let mut style_stack = vec![Style::new().white()];
-
-    // Highlight events are byte ranges plus start/end markers. Track the active
-    // style stack and use rope byte offsets to split ranges back into ratatui
-    // lines at the same byte boundaries Tree-sitter reports.
-    for event in events.flatten() {
-      match event {
-        HighlightEvent::Source { start, end } => {
-          let style = style_stack.last().copied().unwrap_or_else(Style::new);
-
-          source.push_range(&mut lines, &mut spans, start..end, style);
-        }
-        HighlightEvent::HighlightStart(highlight) => style_stack.push(Self::tree_sitter_highlight_style(highlight)),
-        HighlightEvent::HighlightEnd => {
-          style_stack.pop();
-        }
-      }
-    }
-
-    if !spans.is_empty() {
-      lines.push(spans.into());
-    }
-
-    lines
+    HOVER_HIGHLIGHTER
+      .highlight("markdown", value)
+      .unwrap_or_else(|_| value.lines().map(|line| line.to_owned().white().into()).collect())
   }
 
   fn hover_info_lines(widget_set_builder: &WidgetSetBuilder) -> Vec<Line<'static>> {

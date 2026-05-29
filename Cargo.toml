@@ -30,8 +30,6 @@ tokio-stream = "0.1.17"
 tokio-util = "0.7.17"
 tracing = "0.1.43"
 tracing-subscriber = { version = "0.3.22", features = ["json", "valuable"] }
-tree-sitter = "0.25.10"
-tree-sitter-highlight = "0.25.10"
 tree-sitter-md = { package = "tree-sitter-md-025", version = "0.5.6" }
 ulid = { version = "1.2.1", features = ["serde"] }
 
