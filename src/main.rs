@@ -7,6 +7,7 @@ mod lean_server_process;
 mod message;
 mod notification;
 mod open_file;
+mod ratatui_highlight;
 mod responses;
 mod server;
 mod session;
@@ -14,6 +15,7 @@ mod session_map;
 mod tui;
 mod tui_set;
 mod types;
+mod view;
 mod widget_set;
 mod widget_set_builder;
 

@@ -1,119 +1,34 @@
-use std::sync::LazyLock;
+use std::{
+  borrow::Cow,
+  sync::{LazyLock, Mutex},
+};
 
-use getset::{Getters, MutGetters};
-use mkutils::{RatatuiTreeSitterHighlighter, ScrollView, ScrollViewState, ScrollWhen, TreeSitterHighlightTheme, Utils};
+use getset::MutGetters;
+use mkutils::{SyntaxHighlighter, Utils};
 use ratatui::{
-  Frame,
-  layout::{Margin, Rect},
-  style::{Style, Styled, Stylize},
+  style::{Style, Stylize},
   text::Line,
-  widgets::Block,
 };
 
 use crate::{
+  ratatui_highlight::RatatuiHighlight,
   types::{Position, Severity, Utf16},
+  view::View,
   widget_set_builder::WidgetSetBuilder,
 };
 
-static HOVER_HIGHLIGHTER: LazyLock<RatatuiTreeSitterHighlighter> = LazyLock::new(|| {
-  let theme = TreeSitterHighlightTheme::new(Style::new().white())
-    .with_style("attribute", Style::new().blue())
-    .with_style("character", Style::new().yellow())
-    .with_style("comment", Style::new().dark_gray().italic())
-    .with_style("constant", Style::new().cyan())
-    .with_style("constructor", Style::new().green())
-    .with_style("function", Style::new().green())
-    .with_style("keyword", Style::new().magenta())
-    .with_style("markup.raw", Style::new().yellow())
-    .with_style("number", Style::new().cyan())
-    .with_style("operator", Style::new().dark_gray())
-    .with_style("property", Style::new().blue())
-    .with_style("punctuation", Style::new().dark_gray())
-    .with_style("string", Style::new().yellow())
-    .with_style("string.escape", Style::new().magenta())
-    .with_style("text.emphasis", Style::new().white().italic())
-    .with_style("text.literal", Style::new().yellow())
-    .with_style("text.reference", Style::new().green())
-    .with_style("text.strong", Style::new().white().bold())
-    .with_style("text.title", Style::new().cyan().bold())
-    .with_style("text.uri", Style::new().blue().underlined())
-    .with_style("type", Style::new().cyan().bold())
-    .with_style("warning", Style::new().yellow().bold());
+static HOVER_HIGHLIGHTER: LazyLock<Mutex<SyntaxHighlighter<Style>>> = LazyLock::new(|| {
+  let mut highlighter = SyntaxHighlighter::new(RatatuiHighlight::color_scheme());
 
-  RatatuiTreeSitterHighlighter::new(theme)
+  highlighter.add_languages([
+    RatatuiHighlight::markdown_highlight_configuration(),
+    RatatuiHighlight::markdown_inline_highlight_configuration(),
+    RatatuiHighlight::lean_highlight_configuration(),
+  ]);
+  highlighter.add_language_alias(Cow::Borrowed("lean4"), Cow::Borrowed("lean"));
+
+  Mutex::new(highlighter)
 });
-
-#[derive(Getters)]
-#[get = "pub"]
-pub struct View {
-  lines: Vec<Line<'static>>,
-  block: Block<'static>,
-  scroll_view_state: ScrollViewState,
-}
-
-impl View {
-  const CONTENT_AREA_MARGIN: Margin = Margin::new(1, 1);
-  const RENDER_SCROLL_BARS_TIMEOUT: Option<std::time::Duration> = Some(std::time::Duration::from_secs(1));
-  const SCROLL_VIEW_STATE: ScrollViewState =
-    ScrollViewState::new(ScrollWhen::ForLargeContent, Self::RENDER_SCROLL_BARS_TIMEOUT);
-  const STYLE_BLOCK_BORDER: Style = Style::new().white().bold();
-  const STYLE_BLOCK_TITLE: Style = Style::new().dark_gray();
-
-  pub fn new(title: &str, lines: Vec<Line<'static>>) -> Self {
-    let block = Self::create_block(title);
-    let mut scroll_view_state = Self::SCROLL_VIEW_STATE;
-
-    scroll_view_state.set_latest_content_size(lines.content_size());
-
-    Self {
-      lines,
-      block,
-      scroll_view_state,
-    }
-  }
-
-  fn create_block(title: &str) -> Block<'static> {
-    let title = std::format!(" {title} ")
-      .convert::<Line>()
-      .centered()
-      .set_style(Self::STYLE_BLOCK_TITLE);
-
-    Block::bordered().border_style(Self::STYLE_BLOCK_BORDER).title(title)
-  }
-}
-
-impl ScrollView for View {
-  fn scroll_view_state(&self) -> &ScrollViewState {
-    &self.scroll_view_state
-  }
-
-  fn scroll_view_state_mut(&mut self) -> &mut ScrollViewState {
-    &mut self.scroll_view_state
-  }
-
-  fn content_area(&self, scroll_view_area: Rect) -> Rect {
-    scroll_view_area.inner(Self::CONTENT_AREA_MARGIN)
-  }
-
-  fn render_content(&self, frame: &mut Frame, content_area: Rect) {
-    let scroll_offset = self.scroll_view_state.scroll_offset();
-    let rows = scroll_offset.y.range_from_len(content_area.height.into());
-    let cols = scroll_offset.x.range_from_len(content_area.width.into());
-    let line_and_row_area_pairs = self.lines[rows.clamp()].iter().zip(content_area.rows());
-
-    for (line, row_area) in line_and_row_area_pairs {
-      line.subline(cols.clone()).render_to(frame, row_area);
-    }
-  }
-
-  fn render_misc(&self, frame: &mut Frame, scroll_view_area: Rect) {
-    self.block.ref_immut().render_to(frame, scroll_view_area);
-  }
-
-  fn scroll_bar_style(&self) -> Style {
-    Self::STYLE_BLOCK_BORDER
-  }
-}
 
 #[derive(MutGetters)]
 #[get_mut = "pub"]
@@ -203,9 +118,18 @@ impl WidgetSet {
   }
 
   fn markdown_lines(value: &str) -> Vec<Line<'static>> {
-    HOVER_HIGHLIGHTER
-      .highlight("markdown", value)
-      .unwrap_or_else(|_| value.lines().map(|line| line.to_owned().white().into()).collect())
+    let mut output = RatatuiHighlight::new(value);
+    let Ok(mut highlighter) = HOVER_HIGHLIGHTER.lock() else {
+      return Self::plain_markdown_lines(value);
+    };
+
+    highlighter
+      .highlight("markdown", value.as_bytes(), &mut output)
+      .unwrap_or_else(|_| Self::plain_markdown_lines(value))
+  }
+
+  fn plain_markdown_lines(value: &str) -> Vec<Line<'static>> {
+    value.lines().map(|line| line.to_owned().white().into()).collect()
   }
 
   fn hover_info_lines(widget_set_builder: &WidgetSetBuilder) -> Vec<Line<'static>> {

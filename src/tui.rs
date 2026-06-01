@@ -8,10 +8,7 @@ use ratatui::{
   layout::{Constraint, Layout, Rect},
 };
 
-use crate::{
-  commands::TuiCommand,
-  widget_set::{View, WidgetSet},
-};
+use crate::{commands::TuiCommand, view::View, widget_set::WidgetSet};
 
 struct AreaSet {
   goals: Rect,
