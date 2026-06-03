@@ -89,6 +89,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "arborium-lean"
+version = "2.18.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c4d32ba6889807adb3ba4833ae49815c35c6bf32e8822196082fc8ccc7889006"
+dependencies = [
+ "arborium-sysroot",
+ "cc",
+ "tree-sitter-language 0.1.5",
+]
+
+[[package]]
+name = "arborium-sysroot"
+version = "2.18.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9b9ce9dee108d720f7433b99b0d17b15ea6870b89032ce53bd44e78c8687d514"
+dependencies = [
+ "cc",
+ "dlmalloc",
+]
+
+[[package]]
 name = "arrayvec"
 version = "0.7.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -292,6 +313,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dec551ab6e7578819132c713a93c022a05d60159dc86e7a7050223577484c55a"
 dependencies = [
  "rustversion",
+]
+
+[[package]]
+name = "cc"
+version = "1.2.63"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "556e016178bb5662a08681bbe0f00f8e17631781a4dfc8c45e466e4b185ec27f"
+dependencies = [
+ "find-msvc-tools",
+ "shlex",
 ]
 
 [[package]]
@@ -619,10 +650,21 @@ dependencies = [
 ]
 
 [[package]]
-name = "either"
-version = "1.15.0"
+name = "dlmalloc"
+version = "0.2.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "48c757948c5ede0e46177b7add2e67155f70e33c07fea8284df6576da70b3719"
+checksum = "ad5208a115eaba24916f7456929832e310a81518c641f93fee4f89aa93aa3675"
+dependencies = [
+ "cfg-if",
+ "libc",
+ "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "either"
+version = "1.16.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "91622ff5e7162018101f2fea40d6ebf4a78bbe5a49736a2020649edf9693679e"
 
 [[package]]
 name = "enum-assoc"
@@ -706,6 +748,12 @@ dependencies = [
  "thiserror 1.0.69",
  "winapi",
 ]
+
+[[package]]
+name = "find-msvc-tools"
+version = "0.1.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5baebc0774151f905a1a2cc41989300b1e6fbb29aff0ceffa1064fdd3088d582"
 
 [[package]]
 name = "finl_unicode"
@@ -1160,11 +1208,13 @@ name = "lean-lsp"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "arborium-lean",
  "bytes",
  "camino",
  "clap",
  "crossterm",
  "derive_more",
+ "either",
  "enum-assoc",
  "futures",
  "getset",
@@ -1178,6 +1228,9 @@ dependencies = [
  "tokio-util",
  "tracing",
  "tracing-subscriber",
+ "tree-sitter",
+ "tree-sitter-highlight",
+ "tree-sitter-md",
  "ulid",
 ]
 
@@ -1331,9 +1384,9 @@ dependencies = [
 
 [[package]]
 name = "mkutils"
-version = "0.1.133"
+version = "0.1.159"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "84fce52c2255d1b0ddea58a17ff3845cc7dabdd514f5c1d0ad0f0bde26683f52"
+checksum = "879ce998bae0b52cad243eb12ae7c42866fe4b1e3398bc45a77fbe69a260bf72"
 dependencies = [
  "anyhow",
  "arrayvec",
@@ -1342,6 +1395,7 @@ dependencies = [
  "console-subscriber",
  "crossterm",
  "derive_more",
+ "either",
  "futures",
  "getset",
  "home",
@@ -1360,6 +1414,8 @@ dependencies = [
  "tokio-util",
  "tracing",
  "tracing-subscriber",
+ "tree-sitter",
+ "tree-sitter-highlight",
  "trie-rs",
  "tuplities-remove",
  "typenum",
@@ -1370,9 +1426,9 @@ dependencies = [
 
 [[package]]
 name = "mkutils-macros"
-version = "0.1.133"
+version = "0.1.159"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4602ebc79890be0aa7151f0f13420b056e493286b2d7973716c461a00d352d1a"
+checksum = "a6d30e14d852101ab218ce8f52ca4ddf68b0617f13f6a3876759119c6a7906cf"
 dependencies = [
  "heck",
  "proc-macro2",
@@ -2027,9 +2083,9 @@ dependencies = [
 
 [[package]]
 name = "regex"
-version = "1.12.2"
+version = "1.12.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "843bc0191f75f3e22651ae5f1e72939ab2f72a4bc30fa80a066bd66edefc24d4"
+checksum = "e10754a14b9137dd7b1e3e5b0493cc9171fdd105e0ab477f51b72e7f3ac0e276"
 dependencies = [
  "aho-corasick",
  "memchr",
@@ -2160,10 +2216,11 @@ dependencies = [
 
 [[package]]
 name = "serde_json"
-version = "1.0.149"
+version = "1.0.150"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "83fc039473c5595ace860d8c4fafa220ff474b3fc6bfdb4293327f1a37e94d86"
+checksum = "e8014e44b4736ed0538adeecded0fce2a272f22dc9578a7eb6b2d9993c74cfb9"
 dependencies = [
+ "indexmap 2.13.0",
  "itoa",
  "memchr",
  "serde",
@@ -2223,6 +2280,12 @@ checksum = "8b1fdf65dd6331831494dd616b30351c38e96e45921a27745cf98490458b90bb"
 dependencies = [
  "dirs",
 ]
+
+[[package]]
+name = "shlex"
+version = "2.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f8fadd59c855ef2080decdef8ff161eb6661b86933c9d82e5ba29dc602a55aba"
 
 [[package]]
 name = "signal-hook"
@@ -2304,6 +2367,12 @@ name = "static_assertions"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
+
+[[package]]
+name = "streaming-iterator"
+version = "0.1.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2b2231b7c3057d5e4ad0156fb3dc807d900806020c5ffa3ee6ff2c8c76fb8520"
 
 [[package]]
 name = "strsim"
@@ -2786,6 +2855,50 @@ dependencies = [
  "tracing-serde",
  "valuable",
  "valuable-serde",
+]
+
+[[package]]
+name = "tree-sitter"
+version = "0.26.9"
+source = "git+https://github.com/mkxl/tree-sitter?rev=2f01405#2f01405bb00ad2688734178bf6b814e821a45d06"
+dependencies = [
+ "cc",
+ "regex",
+ "serde_json",
+ "streaming-iterator",
+ "tree-sitter-language 0.1.8",
+]
+
+[[package]]
+name = "tree-sitter-highlight"
+version = "0.26.9"
+source = "git+https://github.com/mkxl/tree-sitter?rev=2f01405#2f01405bb00ad2688734178bf6b814e821a45d06"
+dependencies = [
+ "regex",
+ "streaming-iterator",
+ "thiserror 2.0.18",
+ "tree-sitter",
+]
+
+[[package]]
+name = "tree-sitter-language"
+version = "0.1.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c4013970217383f67b18aef68f6fb2e8d409bc5755227092d32efb0422ba24b8"
+
+[[package]]
+name = "tree-sitter-language"
+version = "0.1.8"
+source = "git+https://github.com/mkxl/tree-sitter?rev=2f01405#2f01405bb00ad2688734178bf6b814e821a45d06"
+
+[[package]]
+name = "tree-sitter-md"
+version = "0.5.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2efd398be546456c814598ee56c0f51769a77241511b4a58077815d120afa882"
+dependencies = [
+ "cc",
+ "tree-sitter-language 0.1.5",
 ]
 
 [[package]]

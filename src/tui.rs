@@ -8,10 +8,7 @@ use ratatui::{
   layout::{Constraint, Layout, Rect},
 };
 
-use crate::{
-  commands::TuiCommand,
-  widget_set::{View, WidgetSet},
-};
+use crate::{commands::TuiCommand, view::View, widget_set::WidgetSet};
 
 struct AreaSet {
   goals: Rect,
@@ -42,9 +39,10 @@ pub struct Tui {
 
 impl Tui {
   const SCROLL_COUNT: usize = 1;
+  const TERMINAL_FORCE_FULL_REDRAWS: bool = false;
 
   pub fn new(socket: Socket, tui_command: &TuiCommand) -> Result<Self, IoError> {
-    let terminal = Terminal::new(tui_command.size)?;
+    let terminal = Terminal::new(tui_command.size, Self::TERMINAL_FORCE_FULL_REDRAWS)?;
     let latest_area_set = AreaSet::new(Rect::ZERO);
     let tui = Self {
       socket,

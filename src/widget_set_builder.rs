@@ -1,7 +1,10 @@
 use std::collections::HashMap;
 
 use getset::{Getters, MutGetters};
-use mkutils::Utils;
+use mkutils::{ColorScheme, SyntaxHighlighter, Utils};
+use ratatui::style::Style;
+use tree_sitter::QueryError;
+use tree_sitter_highlight::HighlightConfiguration;
 
 use crate::{
   notification::{FileProgress, Notification, PublishDiagnostics},
@@ -27,22 +30,105 @@ pub struct WidgetSetBuilder {
 
   #[get = "pub"]
   hover_file_result: Option<HoverFileResult>,
+
+  #[get_mut = "pub"]
+  syntax_highlighter: SyntaxHighlighter<Style>,
 }
 
 impl WidgetSetBuilder {
-  pub fn new() -> Self {
+  pub const LANGUAGE_NAME_MARKDOWN: &'static str = "markdown";
+
+  const DEFAULT_STYLE: Style = Style::new().white();
+  const LANGUAGE_NAME_MARKDOWN_INLINE: &'static str = "markdown_inline";
+  const LANGUAGE_NAME_LEAN: &'static str = "lean";
+  const LANGUAGE_NAME_LEAN_4: &'static str = "lean4";
+  const LOCALS_QUERY_MARKDOWN: &'static str = "";
+  const LOCALS_QUERY_MARKDOWN_INLINE: &'static str = "";
+
+  pub fn new() -> Result<Self, QueryError> {
     let file_states = HashMap::new();
     let plain_goals = None;
     let hover_file_result = None;
-
-    Self {
+    let syntax_highlighter = Self::new_syntax_highlighter()?;
+    let widget_set_builder = Self {
       file_states,
       plain_goals,
       hover_file_result,
-    }
+      syntax_highlighter,
+    };
+
+    widget_set_builder.ok()
   }
 
-  pub fn build(&self) -> WidgetSet {
+  fn new_color_scheme() -> ColorScheme<Style> {
+    ColorScheme::new(Self::DEFAULT_STYLE)
+      .insert(ColorScheme::<Style>::ATTRIBUTE, Style::new().blue())
+      .insert(ColorScheme::<Style>::CHARACTER, Style::new().yellow())
+      .insert(ColorScheme::<Style>::COMMENT, Style::new().dark_gray().italic())
+      .insert(ColorScheme::<Style>::CONSTANT, Style::new().cyan())
+      .insert(ColorScheme::<Style>::CONSTRUCTOR, Style::new().green())
+      .insert(ColorScheme::<Style>::FUNCTION, Style::new().green())
+      .insert(ColorScheme::<Style>::KEYWORD, Style::new().magenta())
+      .insert(ColorScheme::<Style>::MARKUP_RAW, Style::new().yellow())
+      .insert(ColorScheme::<Style>::NUMBER, Style::new().cyan())
+      .insert(ColorScheme::<Style>::OPERATOR, Style::new().dark_gray())
+      .insert(ColorScheme::<Style>::PROPERTY, Style::new().blue())
+      .insert(ColorScheme::<Style>::PUNCTUATION, Style::new().dark_gray())
+      .insert(ColorScheme::<Style>::STRING, Style::new().yellow())
+      .insert(ColorScheme::<Style>::STRING_ESCAPE, Style::new().magenta())
+      .insert(ColorScheme::<Style>::TEXT_EMPHASIS, Style::new().white().italic())
+      .insert(ColorScheme::<Style>::TEXT_LITERAL, Style::new().yellow())
+      .insert(ColorScheme::<Style>::TEXT_REFERENCE, Style::new().green())
+      .insert(ColorScheme::<Style>::TEXT_STRONG, Style::new().white().bold())
+      .insert(ColorScheme::<Style>::TEXT_TITLE, Style::new().cyan().bold())
+      .insert(ColorScheme::<Style>::TEXT_URI, Style::new().blue().underlined())
+      .insert(ColorScheme::<Style>::TYPE, Style::new().cyan().bold())
+      .insert(ColorScheme::<Style>::WARNING, Style::new().yellow().bold())
+  }
+
+  fn markdown_highlight_configuration() -> Result<HighlightConfiguration, QueryError> {
+    HighlightConfiguration::new(
+      tree_sitter_md::LANGUAGE.into(),
+      Self::LANGUAGE_NAME_MARKDOWN,
+      tree_sitter_md::HIGHLIGHT_QUERY_BLOCK,
+      tree_sitter_md::INJECTION_QUERY_BLOCK,
+      Self::LOCALS_QUERY_MARKDOWN,
+    )
+  }
+
+  fn markdown_inline_highlight_configuration() -> Result<HighlightConfiguration, QueryError> {
+    HighlightConfiguration::new(
+      tree_sitter_md::INLINE_LANGUAGE.into(),
+      Self::LANGUAGE_NAME_MARKDOWN_INLINE,
+      tree_sitter_md::HIGHLIGHT_QUERY_INLINE,
+      tree_sitter_md::INJECTION_QUERY_INLINE,
+      Self::LOCALS_QUERY_MARKDOWN_INLINE,
+    )
+  }
+
+  fn lean_highlight_configuration() -> Result<HighlightConfiguration, QueryError> {
+    HighlightConfiguration::new(
+      arborium_lean::language().into(),
+      Self::LANGUAGE_NAME_LEAN,
+      arborium_lean::HIGHLIGHTS_QUERY,
+      arborium_lean::INJECTIONS_QUERY,
+      arborium_lean::LOCALS_QUERY,
+    )
+  }
+
+  fn new_syntax_highlighter() -> Result<SyntaxHighlighter<Style>, QueryError> {
+    let mut syntax_highlighter = SyntaxHighlighter::new(Self::new_color_scheme());
+
+    syntax_highlighter
+      .add_language(Self::markdown_highlight_configuration()?)
+      .add_language(Self::markdown_inline_highlight_configuration()?)
+      .add_language(Self::lean_highlight_configuration()?)
+      .add_language_alias(Self::LANGUAGE_NAME_LEAN_4, Self::LANGUAGE_NAME_LEAN);
+
+    syntax_highlighter.ok()
+  }
+
+  pub fn build(&mut self) -> WidgetSet {
     WidgetSet::new(self)
   }
 
@@ -100,5 +186,15 @@ impl WidgetSetBuilder {
       .mem_drop();
 
     self.build()
+  }
+
+  pub fn hover_file_result_and_syntax_highlighter(
+    &mut self,
+  ) -> Option<(&HoverFileResult, &mut SyntaxHighlighter<Style>)> {
+    self
+      .hover_file_result
+      .as_ref()?
+      .pair(self.syntax_highlighter.ref_mut())
+      .some()
   }
 }

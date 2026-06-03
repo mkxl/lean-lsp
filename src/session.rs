@@ -3,7 +3,8 @@ use std::{collections::HashMap, io::Error as IoError};
 use anyhow::Error as AnyhowError;
 use camino::{Utf8Path, Utf8PathBuf};
 use derive_more::{Constructor, Debug as DeriveMoreDebug};
-use futures::{SinkExt, StreamExt, future::Either};
+use either::Either;
+use futures::{SinkExt, StreamExt};
 use mkutils::{ProcessBuilder, Socket, Utils};
 use tokio::{sync::broadcast::Sender as BroadcastSender, task::JoinSet};
 use tokio_stream::wrappers::BroadcastStream as BroadcastReceiverStream;
@@ -83,7 +84,7 @@ impl Session {
     let (notifications, _notifications_receiver) = tokio::sync::broadcast::channel(Self::NOTIFICATIONS_CAPACITY);
     let join_set = JoinSet::new();
     let tui_set = TuiSet::default();
-    let widget_set_builder = WidgetSetBuilder::new();
+    let mut widget_set_builder = WidgetSetBuilder::new()?;
     let latest_widget_set = widget_set_builder.build();
     let session = Self {
       id,
