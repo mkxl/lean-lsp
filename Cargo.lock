@@ -96,7 +96,7 @@ checksum = "c4d32ba6889807adb3ba4833ae49815c35c6bf32e8822196082fc8ccc7889006"
 dependencies = [
  "arborium-sysroot",
  "cc",
- "tree-sitter-language 0.1.5",
+ "tree-sitter-language",
 ]
 
 [[package]]
@@ -2866,7 +2866,7 @@ dependencies = [
  "regex",
  "serde_json",
  "streaming-iterator",
- "tree-sitter-language 0.1.8",
+ "tree-sitter-language",
 ]
 
 [[package]]
@@ -2882,12 +2882,6 @@ dependencies = [
 
 [[package]]
 name = "tree-sitter-language"
-version = "0.1.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c4013970217383f67b18aef68f6fb2e8d409bc5755227092d32efb0422ba24b8"
-
-[[package]]
-name = "tree-sitter-language"
 version = "0.1.8"
 source = "git+https://github.com/mkxl/tree-sitter?rev=2f01405#2f01405bb00ad2688734178bf6b814e821a45d06"
 
@@ -2898,7 +2892,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2efd398be546456c814598ee56c0f51769a77241511b4a58077815d120afa882"
 dependencies = [
  "cc",
- "tree-sitter-language 0.1.5",
+ "tree-sitter-language",
 ]
 
 [[package]]
