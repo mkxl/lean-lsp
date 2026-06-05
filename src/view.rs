@@ -30,6 +30,7 @@ impl View {
     let block = Self::create_block(title);
     let mut scroll_view_state = Self::SCROLL_VIEW_STATE;
 
+    // NOTE: see [latest-content-size-abb4a0]
     scroll_view_state.set_latest_content_size(lines.content_size());
 
     Self {
