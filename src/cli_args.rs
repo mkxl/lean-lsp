@@ -139,7 +139,7 @@ impl CliArgs {
     loop {
       tokio::select! {
         event_res_opt = crossterm_event_stream.next() => socket.send(event_res_opt.check_next()??).await?,
-        byte_str_output = socket.recv::<Vec<u8>>() => screen.writer_mut().write_all_then(&byte_str_output?)?.flush()?,
+        byte_str_output = socket.recv::<Vec<u8>>() => screen.stdout_mut().write_all_then(&byte_str_output?)?.flush()?,
       }
     }
   }

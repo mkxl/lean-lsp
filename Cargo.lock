@@ -1384,9 +1384,9 @@ dependencies = [
 
 [[package]]
 name = "mkutils"
-version = "0.1.159"
+version = "0.1.164"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "879ce998bae0b52cad243eb12ae7c42866fe4b1e3398bc45a77fbe69a260bf72"
+checksum = "b9c01065821790406a6603770faba3923d82659fd147aab4cebd3f46b5d94e9f"
 dependencies = [
  "anyhow",
  "arrayvec",
@@ -1419,6 +1419,7 @@ dependencies = [
  "trie-rs",
  "tuplities-remove",
  "typenum",
+ "ulid",
  "unicode-segmentation",
  "valuable",
  "zed-sum-tree",
@@ -1426,9 +1427,9 @@ dependencies = [
 
 [[package]]
 name = "mkutils-macros"
-version = "0.1.159"
+version = "0.1.164"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a6d30e14d852101ab218ce8f52ca4ddf68b0617f13f6a3876759119c6a7906cf"
+checksum = "1b6d7836911b5fa7c93e16aa75e98f52705c56c3c008710050a2a788b26547a5"
 dependencies = [
  "heck",
  "proc-macro2",

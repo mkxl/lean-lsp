@@ -56,11 +56,11 @@ impl TuiSet {
   }
 
   pub async fn render(&mut self, widget_set: &mut WidgetSet) -> Result<(), AnyhowError> {
-    // NOTE-ff2f17
-    for tui in &mut self.tuis {
-      tui.render(widget_set).await?;
-    }
-
-    ().ok()
+    self
+      .tuis
+      .iter_mut()
+      .stream()
+      .then_try_collect(async |tui| tui.render(widget_set).await)
+      .await
   }
 }
