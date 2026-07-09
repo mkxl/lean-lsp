@@ -20,11 +20,7 @@ pub struct TuiSet {
 
 impl TuiSet {
   pub fn push(&mut self, socket: Socket, tui_command: &TuiCommand) -> Result<(), IoError> {
-    let tui = Tui::new(socket, tui_command)?;
-
-    self.tuis.push(tui);
-
-    ().ok()
+    Tui::new(socket, tui_command)?.push_to(self.tuis.ref_mut()).ok()
   }
 
   pub fn on_tui_event(&mut self, tui_event: TuiEvent, widget_set: &mut WidgetSet) -> Result<(), AnyhowError> {
