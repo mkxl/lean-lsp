@@ -311,16 +311,25 @@ impl Session {
     ().ok()
   }
 
-  pub async fn close_file(&mut self, close_file_command: &CloseFileCommand) -> Result<(), AppError> {
-    self.open_files.check_contains(&close_file_command.filepath)?;
+  pub async fn close_filepath(&mut self, filepath: &Utf8Path) -> Result<(), AppError> {
+    self.open_files.check_contains(filepath)?;
 
-    let uri = close_file_command.filepath.to_uri()?;
+    let uri = filepath.to_uri()?;
     let message = Message::text_document_did_close_notification(&uri);
 
     self.send_notification(message).await?;
-    self.open_files.remove(&close_file_command.filepath);
+    self.open_files.remove(filepath);
 
     ().ok()
+  }
+
+  pub async fn close_file(&mut self, close_file_command: &CloseFileCommand) -> Result<(), AppError> {
+    close_file_command
+      .filepaths
+      .iter()
+      .stream()
+      .then_try_collect(async |filepath| self.close_filepath(filepath).await)
+      .await
   }
 
   pub async fn hover_file(&mut self, socket: Socket, hover_file_command: &HoverFileCommand) -> Result<(), AnyhowError> {
@@ -335,16 +344,11 @@ impl Session {
     ().ok()
   }
 
-  pub async fn open_file(&mut self, open_file_command: OpenFileCommand) -> Result<(), AppError> {
-    self.open_files.check_doesnt_contain(&open_file_command.filepath)?;
+  pub async fn open_filepath(&mut self, filepath: Utf8PathBuf) -> Result<(), AppError> {
+    self.open_files.check_doesnt_contain(&filepath)?;
 
-    let uri = open_file_command.filepath.to_uri()?;
-    let text = open_file_command
-      .filepath
-      .as_path()
-      .read_to_string_fs_async()
-      .await
-      .result?;
+    let uri = filepath.to_uri()?;
+    let text = filepath.as_path().read_to_string_fs_async().await.result?;
     let open_file = OpenFile::new(text);
     let text_document_did_open_notification_message =
       Message::text_document_did_open_notification(open_file.text(), &uri);
@@ -378,9 +382,18 @@ impl Session {
       .send_request(Request::LeanRpcConnect, lean_rpc_connect_request_message)
       .await?;
 
-    self.open_files.insert(open_file_command.filepath, open_file);
+    self.open_files.insert(filepath, open_file);
 
     ().ok()
+  }
+
+  pub async fn open_file(&mut self, open_file_command: OpenFileCommand) -> Result<(), AppError> {
+    open_file_command
+      .filepaths
+      .into_iter()
+      .stream()
+      .then_try_collect(async |filepath| self.open_filepath(filepath).await)
+      .await
   }
 
   pub async fn get_plain_goals(

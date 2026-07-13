@@ -32,7 +32,7 @@ pub struct CloseFileCommand {
   #[arg(long)]
   pub session_id: Option<Ulid>,
 
-  pub filepath: Utf8PathBuf,
+  pub filepaths: Vec<Utf8PathBuf>,
 }
 
 #[derive(Args, Constructor, Debug, Deserialize, Serialize, TypeAssoc)]
@@ -51,7 +51,7 @@ pub struct OpenFileCommand {
   #[arg(long)]
   pub session_id: Option<Ulid>,
 
-  pub filepath: Utf8PathBuf,
+  pub filepaths: Vec<Utf8PathBuf>,
 }
 
 #[derive(Debug, Deserialize, From, Serialize, Subcommand)]
