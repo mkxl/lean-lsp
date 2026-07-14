@@ -28,10 +28,10 @@ impl OpenFile {
     &self.text
   }
 
-  pub const fn increment_version(&mut self) -> usize {
+  pub fn increment_version(&mut self) -> usize {
     let version = self.version;
 
-    self.version += 1;
+    self.version.increment();
 
     version
   }
@@ -122,7 +122,7 @@ impl OpenFileMap {
             map.insert("character_utf8".to_owned(), serde_json::json!(utf8_position.character));
 
             if utf16_position.character == 0
-              && let Some(prev_line) = lines.get(utf16_position.line - 1)
+              && let Some(prev_line) = lines.get(utf16_position.line.decremented())
             {
               let prev_line_len_bytes = prev_line.len();
               let prev_line_len_utf8 = prev_line.chars().count();
