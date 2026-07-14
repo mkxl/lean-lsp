@@ -38,14 +38,22 @@ impl CliArgs {
   const LOG_LEVEL_ENV_NAME: &str = "LOG_LEVEL";
   const TUI_WITH_MOUSE_CAPTURE: bool = true;
 
-  fn init_tracing(&self) {
+  fn init_tracing(&self) -> Result<(), IoError> {
+    let writer = if self.command.is_serve() {
+      std::io::stdout().to_file()?
+    } else {
+      std::io::stderr().to_file()?
+    };
+
     Tracing::default()
       .with_level_filter(self.tracing_level_filter)
       .with_json_enabled(!self.tracing_json_disabled)
       .with_tokio_console_port(self.tracing_tokio_console_port)
       .with_tokio_console_enabled(self.tracing_tokio_console_enabled)
-      .with_stderr_lock_writer()
+      .with_writer(writer)
       .init();
+
+    ().ok()
   }
 
   async fn socket() -> Result<Socket, IoError> {
@@ -145,7 +153,7 @@ impl CliArgs {
   }
 
   pub async fn run(self) -> Result<(), AnyhowError> {
-    self.init_tracing();
+    self.init_tracing()?;
 
     match self.command {
       Command::File(file_command) => Self::file(file_command).await,

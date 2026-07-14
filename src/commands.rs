@@ -2,7 +2,7 @@ use std::io::Error as IoError;
 
 use camino::Utf8PathBuf;
 use clap::{Args, Subcommand};
-use derive_more::{Constructor, From};
+use derive_more::{Constructor, From, IsVariant};
 use mkutils::{FromChain, PointU16, Request, Screen, TypeAssoc, Utils};
 use serde::{Deserialize, Serialize};
 use ulid::Ulid;
@@ -144,7 +144,7 @@ pub struct TuiCommand {
   pub size: PointU16,
 }
 
-#[derive(Debug, Deserialize, From, FromChain, Serialize, Subcommand)]
+#[derive(Debug, Deserialize, From, FromChain, IsVariant, Serialize, Subcommand)]
 #[from_chain(ChangeFileCommand, FileCommand)]
 #[from_chain(CloseFileCommand, FileCommand)]
 #[from_chain(HoverFileCommand, FileCommand)]
