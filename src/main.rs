@@ -4,6 +4,8 @@
 mod cli_args;
 mod commands;
 mod highlight_state;
+mod info_view_content;
+mod info_view_content_builder;
 mod lean_server_process;
 mod message;
 mod notification;
@@ -13,11 +15,9 @@ mod server;
 mod session;
 mod session_map;
 mod tui;
-mod tui_set;
+mod tui_map;
 mod types;
 mod view;
-mod widget_set;
-mod widget_set_builder;
 
 use anyhow::Error as AnyhowError;
 use clap::Parser;

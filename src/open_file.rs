@@ -111,7 +111,7 @@ impl OpenFileMap {
         let character = map.get("character").and_then(Json::as_u64);
 
         if let (Some(lines), Some(line), Some(character)) = (lines, line, character) {
-          #[allow(clippy::cast_possible_truncation)]
+          #[expect(clippy::cast_possible_truncation)]
           let utf16_position = Position::<Utf16>::new(line as usize, character as usize);
 
           if let Some((utf8_position, bytes_position)) = utf16_position.into_utf8_and_bytes_positions(lines) {

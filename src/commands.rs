@@ -1,5 +1,3 @@
-use std::io::Error as IoError;
-
 use camino::Utf8PathBuf;
 use clap::{Args, Subcommand};
 use derive_more::{Constructor, From, IsVariant};
@@ -105,14 +103,8 @@ pub struct NewSessionCommand {
   #[arg(long)]
   pub enrich_utf16_positions: bool,
 
-  #[arg(value_name = "path", default_value = Session::DEFAULT_PATH_STR, value_parser = Self::absolute_path)]
+  #[arg(value_name = "path", default_value = Session::DEFAULT_PATH_STR, value_parser = Utils::absolute_utf8_path_buf)]
   pub absolute_path: Utf8PathBuf,
-}
-
-impl NewSessionCommand {
-  fn absolute_path(path_str: &str) -> Result<Utf8PathBuf, IoError> {
-    path_str.absolute_utf8()?.into_owned().ok()
-  }
 }
 
 #[derive(Args, Debug, Deserialize, Serialize, TypeAssoc)]
