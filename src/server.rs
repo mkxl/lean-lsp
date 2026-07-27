@@ -7,12 +7,14 @@ use tokio::net::{UnixListener, UnixStream, unix::SocketAddr};
 use crate::{
   commands::{Command, GetCommand, KillCommand, ListCommand},
   session_map::SessionMap,
+  tui_map::TuiMap,
   types::AppError,
 };
 
 #[derive(Default)]
 pub struct Server {
   session_map: SessionMap,
+  tui_map: TuiMap,
   kill_event: Event,
 }
 
@@ -69,7 +71,7 @@ impl Server {
       }
       Command::Rebuild(rebuild_command) => self.session_map.on_rebuild_command(socket, &rebuild_command).await,
       Command::Serve => Self::on_serve_command().send_to(socket).await,
-      Command::Tui(tui_command) => self.session_map.on_tui_command(socket, &tui_command),
+      Command::Tui(tui_command) => self.tui_map.on_tui_command(socket, &tui_command),
     }
   }
 
@@ -83,8 +85,9 @@ impl Server {
     loop {
       tokio::select! {
         pair_res = listener.accept() => self.on_unix_stream(pair_res).await,
-        session_input = self.session_map.next_session_input() => self.session_map.on_input(session_input).await,
-        _render_instant = render_interval.tick() => self.session_map.render().await,
+        session_message = self.session_map.next_message() => self.session_map.on_message(session_message).await,
+        tui_event = self.tui_map.next_tui_event() => self.tui_map.on_event(tui_event, &self.session_map),
+        _render_instant = render_interval.tick() => self.tui_map.render(&self.session_map).await,
         _keep_alive_instant = keep_alive_interval.tick() => self.session_map.send_keep_alive().await,
         () = self.kill_event.wait() => return ().ok()
       }

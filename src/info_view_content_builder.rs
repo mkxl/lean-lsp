@@ -7,10 +7,10 @@ use tree_sitter::QueryError;
 use tree_sitter_highlight::HighlightConfiguration;
 
 use crate::{
+  info_view_content::InfoViewContent,
   notification::{FileProgress, Notification, PublishDiagnostics},
   responses::{GetPlainGoalsResponse, HoverFileResponse},
   types::{Diagnostic, HoverFileResult, PlainGoals, Processing, TextDocument},
-  widget_set::WidgetSet,
 };
 
 #[derive(Default, Getters, MutGetters)]
@@ -21,7 +21,7 @@ pub struct FileState {
 }
 
 #[derive(Getters, MutGetters)]
-pub struct WidgetSetBuilder {
+pub struct InfoViewContentBuilder {
   #[get = "pub"]
   file_states: HashMap<TextDocument, FileState>,
 
@@ -35,7 +35,7 @@ pub struct WidgetSetBuilder {
   syntax_highlighter: SyntaxHighlighter<Style>,
 }
 
-impl WidgetSetBuilder {
+impl InfoViewContentBuilder {
   pub const LANGUAGE_NAME_MARKDOWN: &'static str = "markdown";
 
   const DEFAULT_STYLE: Style = Style::new().white();
@@ -50,14 +50,14 @@ impl WidgetSetBuilder {
     let plain_goals = None;
     let hover_file_result = None;
     let syntax_highlighter = Self::new_syntax_highlighter()?;
-    let widget_set_builder = Self {
+    let info_view_content_builder = Self {
       file_states,
       plain_goals,
       hover_file_result,
       syntax_highlighter,
     };
 
-    widget_set_builder.ok()
+    info_view_content_builder.ok()
   }
 
   fn new_color_scheme() -> ColorScheme<Style> {
@@ -128,8 +128,8 @@ impl WidgetSetBuilder {
     syntax_highlighter.ok()
   }
 
-  pub fn build(&mut self) -> WidgetSet {
-    WidgetSet::new(self)
+  pub fn build(&mut self) -> InfoViewContent {
+    InfoViewContent::new(self)
   }
 
   fn update_file_states<T>(
@@ -137,7 +137,7 @@ impl WidgetSetBuilder {
     text_document: TextDocument,
     getter: impl FnOnce(&mut FileState) -> &mut T,
     new_value: T,
-  ) -> WidgetSet {
+  ) -> InfoViewContent {
     self
       .file_states
       .entry(text_document)
@@ -149,7 +149,7 @@ impl WidgetSetBuilder {
     self.build()
   }
 
-  fn on_file_progress(&mut self, file_progress: FileProgress) -> WidgetSet {
+  fn on_file_progress(&mut self, file_progress: FileProgress) -> InfoViewContent {
     self.update_file_states(
       file_progress.text_document,
       FileState::processing_mut,
@@ -157,7 +157,7 @@ impl WidgetSetBuilder {
     )
   }
 
-  fn on_publish_diagnostics(&mut self, publish_diagnostics: PublishDiagnostics) -> WidgetSet {
+  fn on_publish_diagnostics(&mut self, publish_diagnostics: PublishDiagnostics) -> InfoViewContent {
     self.update_file_states(
       publish_diagnostics.text_document,
       FileState::diagnostics_mut,
@@ -165,7 +165,7 @@ impl WidgetSetBuilder {
     )
   }
 
-  pub fn on_notification(&mut self, notification: Notification) -> Option<WidgetSet> {
+  pub fn on_notification(&mut self, notification: Notification) -> Option<InfoViewContent> {
     match notification {
       Notification::FileProgress(file_progress) => self.on_file_progress(file_progress).some(),
       Notification::PublishDiagnostics(publish_diagnostics) => self.on_publish_diagnostics(publish_diagnostics).some(),
@@ -173,13 +173,13 @@ impl WidgetSetBuilder {
     }
   }
 
-  pub fn on_get_plain_goals_response(&mut self, get_plain_goals_response: GetPlainGoalsResponse) -> WidgetSet {
+  pub fn on_get_plain_goals_response(&mut self, get_plain_goals_response: GetPlainGoalsResponse) -> InfoViewContent {
     self.plain_goals.mem_replace(get_plain_goals_response.result).mem_drop();
 
     self.build()
   }
 
-  pub fn on_hover_file_response(&mut self, hover_file_response: HoverFileResponse) -> WidgetSet {
+  pub fn on_hover_file_response(&mut self, hover_file_response: HoverFileResponse) -> InfoViewContent {
     self
       .hover_file_result
       .mem_replace(hover_file_response.result)

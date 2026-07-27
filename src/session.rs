@@ -3,7 +3,6 @@ use std::{collections::HashMap, io::Error as IoError};
 use anyhow::Error as AnyhowError;
 use camino::{Utf8Path, Utf8PathBuf};
 use derive_more::{Constructor, Debug as DeriveMoreDebug};
-use either::Either;
 use futures::{SinkExt, StreamExt};
 use mkutils::{ProcessBuilder, Socket, Utils};
 use tokio::{sync::broadcast::Sender as BroadcastSender, task::JoinSet};
@@ -13,25 +12,22 @@ use ulid::Ulid;
 use crate::{
   commands::{
     ChangeFileCommand, CloseFileCommand, GetPlainGoalsCommand, HoverFileCommand, NewSessionCommand,
-    NotificationsCommand, OpenFileCommand, TuiCommand,
+    NotificationsCommand, OpenFileCommand,
   },
+  info_view_content::InfoViewContent,
+  info_view_content_builder::InfoViewContentBuilder,
   lean_server_process::LeanServerProcess,
   message::{Id, Message},
   notification::Notification,
   open_file::{OpenFile, OpenFileMap},
   responses::{GetPlainGoalsResponse, HoverFileResponse},
-  tui_set::{TuiEvent, TuiSet},
   types::{AppError, Position, RpcConnected, SessionInfo, Utf16},
-  widget_set::WidgetSet,
-  widget_set_builder::WidgetSetBuilder,
 };
 
-pub type Input = Either<TuiEvent, Message>;
-
 #[derive(Constructor)]
-pub struct SessionInput {
+pub struct SessionMessage {
   pub session_id: Ulid,
-  pub input: Result<Input, AnyhowError>,
+  pub message: Result<Message, AnyhowError>,
 }
 
 #[derive(DeriveMoreDebug)]
@@ -55,9 +51,8 @@ pub struct Session {
   requests: HashMap<Id, Request>,
   notifications: BroadcastSender<Notification>,
   join_set: JoinSet<Result<(), AnyhowError>>,
-  tui_set: TuiSet,
-  widget_set_builder: WidgetSetBuilder,
-  latest_widget_set: WidgetSet,
+  info_view_content_builder: InfoViewContentBuilder,
+  latest_info_view_content: InfoViewContent,
 }
 
 impl Session {
@@ -83,9 +78,8 @@ impl Session {
     let requests = HashMap::new();
     let (notifications, _notifications_receiver) = tokio::sync::broadcast::channel(Self::NOTIFICATIONS_CAPACITY);
     let join_set = JoinSet::new();
-    let tui_set = TuiSet::default();
-    let mut widget_set_builder = WidgetSetBuilder::new()?;
-    let latest_widget_set = widget_set_builder.build();
+    let mut info_view_content_builder = InfoViewContentBuilder::new()?;
+    let latest_info_view_content = info_view_content_builder.build();
     let session = Self {
       id,
       lake_session_id,
@@ -96,9 +90,8 @@ impl Session {
       requests,
       notifications,
       join_set,
-      tui_set,
-      widget_set_builder,
-      latest_widget_set,
+      info_view_content_builder,
+      latest_info_view_content,
     };
 
     session.ok()
@@ -122,23 +115,16 @@ impl Session {
     self.id
   }
 
+  pub const fn info_view_content(&self) -> &InfoViewContent {
+    &self.latest_info_view_content
+  }
+
   pub fn info(&self) -> SessionInfo {
     SessionInfo::new(self.id, self.project_absolute_dirpath.clone())
   }
 
-  async fn next_input(&mut self) -> Result<Input, AnyhowError> {
-    let tui_event_res_future = self.tui_set.next_tui_event();
-    let message_res_future = self.lean_server_process.next_message();
-    let input = match tui_event_res_future.into_select(message_res_future).await {
-      Either::Left(tui_event_res) => tui_event_res?.into_left(),
-      Either::Right(message_res) => message_res?.into_right(),
-    };
-
-    input.ok()
-  }
-
-  pub async fn next_session_input(&mut self) -> SessionInput {
-    SessionInput::new(self.id, self.next_input().await)
+  pub async fn next_message(&mut self) -> SessionMessage {
+    SessionMessage::new(self.id, self.lean_server_process.next_message().await)
   }
 
   fn on_notification(&mut self, message: Message) -> Result<(), AnyhowError> {
@@ -149,8 +135,8 @@ impl Session {
 
     let notification = message.json.into_value_from_json::<Notification>()?;
 
-    if let Some(widget_set) = self.widget_set_builder.on_notification(notification.clone()) {
-      self.latest_widget_set = widget_set;
+    if let Some(info_view_content) = self.info_view_content_builder.on_notification(notification.clone()) {
+      self.latest_info_view_content = info_view_content;
     }
 
     if let Err(send_error) = self.notifications.send(notification) {
@@ -166,8 +152,8 @@ impl Session {
   fn on_get_plain_goals_response(&mut self, message: Message) -> Result<GetPlainGoalsResponse, AppError> {
     let get_plain_goals_response = message.json.into_value_from_json::<GetPlainGoalsResponse>()?;
 
-    self.latest_widget_set = self
-      .widget_set_builder
+    self.latest_info_view_content = self
+      .info_view_content_builder
       .on_get_plain_goals_response(get_plain_goals_response.clone());
 
     get_plain_goals_response.ok()
@@ -176,8 +162,8 @@ impl Session {
   fn on_hover_file_response(&mut self, message: Message) -> Result<HoverFileResponse, AppError> {
     let hover_file_response = message.json.into_value_from_json::<HoverFileResponse>()?;
 
-    self.latest_widget_set = self
-      .widget_set_builder
+    self.latest_info_view_content = self
+      .info_view_content_builder
       .on_hover_file_response(hover_file_response.clone());
 
     hover_file_response.ok()
@@ -238,7 +224,7 @@ impl Session {
     tracing::info!(received_request = message.json.as_valuable(), "received request");
   }
 
-  async fn on_message(&mut self, mut message: Message) -> Result<(), AnyhowError> {
+  pub async fn on_message(&mut self, mut message: Message) -> Result<(), AnyhowError> {
     if self.new_session_command.enrich_utf16_positions {
       self.open_files.enrich_positions(&mut message.json);
     }
@@ -249,13 +235,6 @@ impl Session {
       self.on_response(request, message).await
     } else {
       Self::on_request(&message).ok()
-    }
-  }
-
-  pub async fn on_input(&mut self, input: Input) -> Result<(), AnyhowError> {
-    match input {
-      Either::Left(tui_event) => self.tui_set.on_tui_event(tui_event, &mut self.latest_widget_set),
-      Either::Right(message) => self.on_message(message).await,
     }
   }
 
@@ -487,13 +466,5 @@ impl Session {
     self.reset(socket).await?;
 
     ().ok()
-  }
-
-  pub fn add_tui(&mut self, socket: Socket, tui_command: &TuiCommand) -> Result<(), IoError> {
-    self.tui_set.push(socket, tui_command)
-  }
-
-  pub async fn render(&mut self) -> Result<(), AnyhowError> {
-    self.tui_set.render(&mut self.latest_widget_set).await
   }
 }

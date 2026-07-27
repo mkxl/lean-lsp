@@ -1,4 +1,4 @@
-use std::{borrow::Borrow, collections::HashMap};
+use std::collections::HashMap;
 
 use anyhow::Error as AnyhowError;
 use mkutils::{Event, Socket, Utils};
@@ -7,9 +7,9 @@ use ulid::Ulid;
 use crate::{
   commands::{
     ChangeFileCommand, CloseFileCommand, FileCommand, GetCommand, InfoViewCommand, KillCommand, NewSessionCommand,
-    NotificationsCommand, OpenFileCommand, RebuildCommand, TuiCommand,
+    NotificationsCommand, OpenFileCommand, RebuildCommand,
   },
-  session::{Session, SessionInput},
+  session::{Session, SessionMessage},
   types::{AppError, SessionInfo},
 };
 
@@ -19,40 +19,20 @@ pub struct SessionMap {
 }
 
 impl SessionMap {
-  fn ambigious_session_result<T>(&self) -> Result<T, AnyhowError> {
-    anyhow::bail!(
-      "unspecified session id is ambiguous with {num} sessions",
-      num = self.sessions.len()
-    )
+  pub fn random_session_id(&self) -> Option<Ulid> {
+    self.sessions.keys().next()?.copied().some()
   }
 
-  pub fn get<U: Borrow<Ulid>>(&self, session_id: Option<U>) -> Result<&Session, AnyhowError> {
-    if let Some(session_id) = session_id {
-      self.sessions.get(session_id.borrow()).check_present()
-    } else if self.sessions.len() == 1 {
-      self.sessions.values().next().check_next()
-    } else {
-      self.ambigious_session_result()
-    }
+  pub fn contains(&self, session_id: &Ulid) -> bool {
+    self.sessions.contains_key(session_id)
   }
 
-  fn get_mut<U: Borrow<Ulid>>(&mut self, session_id: Option<U>) -> Result<&mut Session, AnyhowError> {
-    if let Some(session_id) = session_id {
-      self.sessions.get_mut(session_id.borrow()).check_present()
-    } else if self.sessions.len() == 1 {
-      self.sessions.values_mut().next().check_next()
-    } else {
-      self.ambigious_session_result()
-    }
+  pub fn try_get(&self, session_id: impl Into<Option<Ulid>>) -> Result<&Session, AnyhowError> {
+    self.sessions.try_get(session_id)
   }
 
-  pub async fn next_session_input(&mut self) -> SessionInput {
-    self
-      .sessions
-      .values_mut()
-      .map(Session::next_session_input)
-      .select_all()
-      .await
+  pub async fn next_message(&mut self) -> SessionMessage {
+    self.sessions.values_mut().map(Session::next_message).select_all().await
   }
 
   pub async fn send_keep_alive(&mut self) -> Result<(), AnyhowError> {
@@ -68,7 +48,8 @@ impl SessionMap {
     match file_command {
       FileCommand::Change(change_file_command) => {
         self
-          .get_mut(change_file_command.session_id)?
+          .sessions
+          .try_get_mut(change_file_command.session_id)?
           .change_file(&change_file_command)
           .await
           .respond_to::<ChangeFileCommand>(socket)
@@ -76,7 +57,8 @@ impl SessionMap {
       }
       FileCommand::Close(close_file_command) => {
         self
-          .get_mut(close_file_command.session_id)?
+          .sessions
+          .try_get_mut(close_file_command.session_id)?
           .close_file(&close_file_command)
           .await
           .respond_to::<CloseFileCommand>(socket)
@@ -84,13 +66,15 @@ impl SessionMap {
       }
       FileCommand::Hover(hover_file_command) => {
         self
-          .get_mut(hover_file_command.session_id)?
+          .sessions
+          .try_get_mut(hover_file_command.session_id)?
           .hover_file(socket, &hover_file_command)
           .await
       }
       FileCommand::Open(open_file_command) => {
         self
-          .get_mut(open_file_command.session_id)?
+          .sessions
+          .try_get_mut(open_file_command.session_id)?
           .open_file(open_file_command)
           .await
           .respond_to::<OpenFileCommand>(socket)
@@ -100,7 +84,7 @@ impl SessionMap {
   }
 
   pub fn on_get_command(&self, get_command: &GetCommand) -> Result<SessionInfo, AppError> {
-    self.get(get_command.session_id)?.info().ok()
+    self.sessions.try_get(get_command.session_id)?.info().ok()
   }
 
   pub async fn on_info_view_command(
@@ -111,7 +95,8 @@ impl SessionMap {
     match &info_view_command {
       InfoViewCommand::GetPlainGoals(get_plain_goals_command) => {
         self
-          .get_mut(get_plain_goals_command.session_id)?
+          .sessions
+          .try_get_mut(get_plain_goals_command.session_id)?
           .get_plain_goals(socket, get_plain_goals_command)
           .await
       }
@@ -161,7 +146,8 @@ impl SessionMap {
     notifications_command: NotificationsCommand,
   ) -> Result<(), AnyhowError> {
     self
-      .get_mut(notifications_command.session_id)?
+      .sessions
+      .try_get_mut(notifications_command.session_id)?
       .notify(socket, notifications_command)
       .ok()
   }
@@ -171,26 +157,18 @@ impl SessionMap {
     socket: Socket,
     rebuild_command: &RebuildCommand,
   ) -> Result<(), AnyhowError> {
-    self.get_mut(rebuild_command.session_id)?.rebuild(socket).await
-  }
-
-  pub fn on_tui_command(&mut self, socket: Socket, tui_command: &TuiCommand) -> Result<(), AnyhowError> {
-    self.get_mut(tui_command.session_id)?.add_tui(socket, tui_command)?.ok()
-  }
-
-  pub async fn on_input(&mut self, session_input: SessionInput) -> Result<(), AnyhowError> {
     self
-      .get_mut(session_input.session_id.some())?
-      .on_input(session_input.input?)
+      .sessions
+      .try_get_mut(rebuild_command.session_id)?
+      .rebuild(socket)
       .await
   }
 
-  pub async fn render(&mut self) -> Result<(), AnyhowError> {
+  pub async fn on_message(&mut self, session_message: SessionMessage) -> Result<(), AnyhowError> {
     self
       .sessions
-      .values_mut()
-      .map(Session::render)
-      .try_join_all_into()
+      .try_get_mut(session_message.session_id)?
+      .on_message(session_message.message?)
       .await
   }
 }

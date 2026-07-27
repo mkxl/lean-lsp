@@ -1,7 +1,7 @@
 use camino::Utf8Path;
 use serde_json::Value as Json;
 
-#[allow(clippy::too_many_lines)]
+#[expect(clippy::too_many_lines)]
 pub fn initialize_params(root_path: &Utf8Path, root_uri: &str, name: &str, process_id: u32) -> Json {
   serde_json::json!({
     "rootPath": root_path,
