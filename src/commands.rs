@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 use ulid::Ulid;
 
 use crate::{
+  info_view_builder::InfoViewData,
   lean_server_process::LeanServerProcess,
   responses::{GetPlainGoalsResponse, HoverFileResponse},
   session::Session,
@@ -76,8 +77,16 @@ pub struct GetPlainGoalsCommand {
   pub location: Location<Utf8>,
 }
 
+#[derive(Args, Constructor, Debug, Deserialize, Serialize, TypeAssoc)]
+#[type_assoc(impl_trait = Request, Response = InfoViewData, Serialized = Command)]
+pub struct GetDataCommand {
+  #[arg(long)]
+  pub session_id: Option<Ulid>,
+}
+
 #[derive(Debug, Deserialize, From, Serialize, Subcommand)]
 pub enum InfoViewCommand {
+  GetData(GetDataCommand),
   GetPlainGoals(GetPlainGoalsCommand),
 }
 
@@ -142,6 +151,7 @@ pub struct TuiCommand {
 #[from_chain(HoverFileCommand, FileCommand)]
 #[from_chain(OpenFileCommand, FileCommand)]
 #[from_chain(GetPlainGoalsCommand, InfoViewCommand)]
+#[from_chain(GetDataCommand, InfoViewCommand)]
 pub enum Command {
   #[command(subcommand)]
   File(FileCommand),

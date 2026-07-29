@@ -8,7 +8,7 @@ use tree_sitter_highlight::Error as TreeSitterHighlightError;
 
 use crate::{
   highlight_state::HighlightState,
-  info_view_content_builder::InfoViewContentBuilder,
+  info_view_builder::InfoViewBuilder,
   types::{Position, Severity, Utf16},
   view::View,
 };
@@ -16,13 +16,13 @@ use crate::{
 #[expect(dead_code)]
 #[derive(MutGetters)]
 #[get_mut = "pub"]
-pub struct InfoViewContent {
+pub struct InfoView {
   goals: View,
   hover_info: View,
   messages: View,
 }
 
-impl InfoViewContent {
+impl InfoView {
   const MESSAGE_NO_GOALS: &str = "No goals";
   const MESSAGE_NO_HOVER: &str = "No information available";
   const MESSAGE_NO_MESSAGE: &str = "No messages";
@@ -31,10 +31,10 @@ impl InfoViewContent {
   const TITLE_MESSAGES: &str = "Messages";
   const TURNSTILE: &str = "⊢ ";
 
-  pub fn new(info_view_content_builder: &mut InfoViewContentBuilder) -> Self {
-    let goals = Self::create_goals_view(info_view_content_builder);
-    let hover_info = Self::create_hover_info_view(info_view_content_builder);
-    let messages = Self::create_messages_view(info_view_content_builder);
+  pub fn new(info_view_builder: &mut InfoViewBuilder) -> Self {
+    let goals = Self::create_goals_view(info_view_builder);
+    let hover_info = Self::create_hover_info_view(info_view_builder);
+    let messages = Self::create_messages_view(info_view_builder);
 
     Self {
       goals,
@@ -62,8 +62,8 @@ impl InfoViewContent {
     }
   }
 
-  fn goals_view_lines(info_view_content_builder: &InfoViewContentBuilder) -> Vec<Line<'static>> {
-    let Some(plain_goals) = &info_view_content_builder.plain_goals() else {
+  fn goals_view_lines(info_view_builder: &InfoViewBuilder) -> Vec<Line<'static>> {
+    let Some(plain_goals) = &info_view_builder.info_view_data().plain_goals() else {
       return Self::MESSAGE_NO_GOALS.dim().convert::<Line>().singleton();
     };
 
@@ -95,8 +95,8 @@ impl InfoViewContent {
     lines
   }
 
-  fn create_goals_view(info_view_content_builder: &InfoViewContentBuilder) -> View {
-    let lines = Self::goals_view_lines(info_view_content_builder);
+  fn create_goals_view(info_view_builder: &InfoViewBuilder) -> View {
+    let lines = Self::goals_view_lines(info_view_builder);
 
     View::new(Self::TITLE_GOALS, lines)
   }
@@ -108,15 +108,14 @@ impl InfoViewContent {
     let mut highlight_state = HighlightState::new(value);
 
     syntax_highlighter.highlight(
-      InfoViewContentBuilder::LANGUAGE_NAME_MARKDOWN,
+      InfoViewBuilder::LANGUAGE_NAME_MARKDOWN,
       value,
       highlight_state.ref_mut(),
     )
   }
 
-  fn hover_info_lines(info_view_content_builder: &mut InfoViewContentBuilder) -> Vec<Line<'static>> {
-    let Some((hover_file_result, syntax_highlighter)) =
-      info_view_content_builder.hover_file_result_and_syntax_highlighter()
+  fn hover_info_lines(info_view_builder: &mut InfoViewBuilder) -> Vec<Line<'static>> {
+    let Some((hover_file_result, syntax_highlighter)) = info_view_builder.hover_file_result_and_syntax_highlighter()
     else {
       return Self::MESSAGE_NO_HOVER.dim().convert::<Line>().singleton();
     };
@@ -127,8 +126,8 @@ impl InfoViewContent {
     }
   }
 
-  fn create_hover_info_view(info_view_content_builder: &mut InfoViewContentBuilder) -> View {
-    let lines = Self::hover_info_lines(info_view_content_builder);
+  fn create_hover_info_view(info_view_builder: &mut InfoViewBuilder) -> View {
+    let lines = Self::hover_info_lines(info_view_builder);
 
     View::new(Self::TITLE_HOVER_INFO, lines)
   }
@@ -144,8 +143,8 @@ impl InfoViewContent {
     let row = position.line.incremented();
     let col = position.character.incremented();
     let suffix = std::format!(":{row}:{col}").dark_gray();
-    let color = severity.color();
-    let label = severity.label().bold().fg(color);
+    let color = severity.info().color();
+    let label = severity.info().label().bold().fg(color);
     let line_1 = file_name.add_span(suffix).add_span(" ").add_span(label);
     let line_2 = "  ".add_span(message.to_owned()).fg(color);
     let line_3 = Line::default();
@@ -155,11 +154,11 @@ impl InfoViewContent {
     lines.push(line_3);
   }
 
-  fn message_lines(info_view_content_builder: &InfoViewContentBuilder) -> Vec<Line<'static>> {
+  fn message_lines(info_view_builder: &InfoViewBuilder) -> Vec<Line<'static>> {
     let mut lines = Vec::new();
     let mut rendered_message = false;
 
-    for (text_document, file_state) in info_view_content_builder.file_states() {
+    for (text_document, file_state) in info_view_builder.info_view_data().file_states() {
       let file_name = text_document.file_name();
 
       for processing in file_state.processing() {
@@ -192,8 +191,8 @@ impl InfoViewContent {
     lines
   }
 
-  fn create_messages_view(info_view_content_builder: &InfoViewContentBuilder) -> View {
-    let lines = Self::message_lines(info_view_content_builder);
+  fn create_messages_view(info_view_builder: &InfoViewBuilder) -> View {
+    let lines = Self::message_lines(info_view_builder);
 
     View::new(Self::TITLE_MESSAGES, lines)
   }

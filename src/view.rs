@@ -7,7 +7,7 @@ use ratatui::{
   layout::{Margin, Rect},
   style::{Style, Styled},
   text::Line,
-  widgets::Block,
+  widgets::{Block, BorderType},
 };
 
 #[derive(Getters)]
@@ -19,6 +19,7 @@ pub struct View {
 }
 
 impl View {
+  const BORDER_TYPE: BorderType = BorderType::Rounded;
   const CONTENT_AREA_MARGIN: Margin = Margin::new(1, 1);
   const RENDER_SCROLL_BARS_TIMEOUT: Option<Duration> = Some(Duration::from_secs(1));
   const SCROLL_VIEW_STATE: ScrollViewState =
@@ -46,7 +47,10 @@ impl View {
       .centered()
       .set_style(Self::STYLE_BLOCK_TITLE);
 
-    Block::bordered().border_style(Self::STYLE_BLOCK_BORDER).title(title)
+    Block::bordered()
+      .border_style(Self::STYLE_BLOCK_BORDER)
+      .border_type(Self::BORDER_TYPE)
+      .title(title)
   }
 }
 

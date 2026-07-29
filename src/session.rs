@@ -14,8 +14,8 @@ use crate::{
     ChangeFileCommand, CloseFileCommand, GetPlainGoalsCommand, HoverFileCommand, NewSessionCommand,
     NotificationsCommand, OpenFileCommand,
   },
-  info_view_content::InfoViewContent,
-  info_view_content_builder::InfoViewContentBuilder,
+  info_view::InfoView,
+  info_view_builder::{InfoViewBuilder, InfoViewData},
   lean_server_process::LeanServerProcess,
   message::{Id, Message},
   notification::Notification,
@@ -51,8 +51,8 @@ pub struct Session {
   requests: HashMap<Id, Request>,
   notifications: BroadcastSender<Notification>,
   join_set: JoinSet<Result<(), AnyhowError>>,
-  info_view_content_builder: InfoViewContentBuilder,
-  latest_info_view_content: InfoViewContent,
+  info_view_builder: InfoViewBuilder,
+  latest_info_view: InfoView,
 }
 
 impl Session {
@@ -78,8 +78,8 @@ impl Session {
     let requests = HashMap::new();
     let (notifications, _notifications_receiver) = tokio::sync::broadcast::channel(Self::NOTIFICATIONS_CAPACITY);
     let join_set = JoinSet::new();
-    let mut info_view_content_builder = InfoViewContentBuilder::new()?;
-    let latest_info_view_content = info_view_content_builder.build();
+    let mut info_view_builder = InfoViewBuilder::new()?;
+    let latest_info_view = info_view_builder.build();
     let session = Self {
       id,
       lake_session_id,
@@ -90,8 +90,8 @@ impl Session {
       requests,
       notifications,
       join_set,
-      info_view_content_builder,
-      latest_info_view_content,
+      info_view_builder,
+      latest_info_view,
     };
 
     session.ok()
@@ -115,8 +115,8 @@ impl Session {
     self.id
   }
 
-  pub const fn info_view_content(&self) -> &InfoViewContent {
-    &self.latest_info_view_content
+  pub const fn info_view(&self) -> &InfoView {
+    &self.latest_info_view
   }
 
   pub fn info(&self) -> SessionInfo {
@@ -135,8 +135,8 @@ impl Session {
 
     let notification = message.json.into_value_from_json::<Notification>()?;
 
-    if let Some(info_view_content) = self.info_view_content_builder.on_notification(notification.clone()) {
-      self.latest_info_view_content = info_view_content;
+    if let Some(info_view) = self.info_view_builder.on_notification(notification.clone()) {
+      self.latest_info_view = info_view;
     }
 
     if let Err(send_error) = self.notifications.send(notification) {
@@ -152,8 +152,8 @@ impl Session {
   fn on_get_plain_goals_response(&mut self, message: Message) -> Result<GetPlainGoalsResponse, AppError> {
     let get_plain_goals_response = message.json.into_value_from_json::<GetPlainGoalsResponse>()?;
 
-    self.latest_info_view_content = self
-      .info_view_content_builder
+    self.latest_info_view = self
+      .info_view_builder
       .on_get_plain_goals_response(get_plain_goals_response.clone());
 
     get_plain_goals_response.ok()
@@ -162,8 +162,8 @@ impl Session {
   fn on_hover_file_response(&mut self, message: Message) -> Result<HoverFileResponse, AppError> {
     let hover_file_response = message.json.into_value_from_json::<HoverFileResponse>()?;
 
-    self.latest_info_view_content = self
-      .info_view_content_builder
+    self.latest_info_view = self
+      .info_view_builder
       .on_hover_file_response(hover_file_response.clone());
 
     hover_file_response.ok()
@@ -389,6 +389,10 @@ impl Session {
     self.send_request(request, message).await?;
 
     ().ok()
+  }
+
+  pub fn get_data(&self) -> InfoViewData {
+    self.info_view_builder.info_view_data().clone()
   }
 
   pub async fn kill(&mut self) -> Result<(), IoError> {

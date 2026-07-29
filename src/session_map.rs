@@ -6,8 +6,8 @@ use ulid::Ulid;
 
 use crate::{
   commands::{
-    ChangeFileCommand, CloseFileCommand, FileCommand, GetCommand, InfoViewCommand, KillCommand, NewSessionCommand,
-    NotificationsCommand, OpenFileCommand, RebuildCommand,
+    ChangeFileCommand, CloseFileCommand, FileCommand, GetCommand, GetDataCommand, InfoViewCommand, KillCommand,
+    NewSessionCommand, NotificationsCommand, OpenFileCommand, RebuildCommand,
   },
   session::{Session, SessionMessage},
   types::{AppError, SessionInfo},
@@ -98,6 +98,14 @@ impl SessionMap {
           .sessions
           .try_get_mut(get_plain_goals_command.session_id)?
           .get_plain_goals(socket, get_plain_goals_command)
+          .await
+      }
+      InfoViewCommand::GetData(get_data_command) => {
+        self
+          .sessions
+          .try_get_mut(get_data_command.session_id)?
+          .get_data()
+          .respond_to::<GetDataCommand>(socket)
           .await
       }
     }?

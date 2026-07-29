@@ -1,27 +1,28 @@
 use std::collections::HashMap;
 
 use getset::{Getters, MutGetters};
-use mkutils::{ColorScheme, SyntaxHighlighter, Utils};
+use mkutils::{ColorScheme, Constructor, SyntaxHighlighter, Utils};
 use ratatui::style::Style;
+use serde::{Deserialize, Serialize};
 use tree_sitter::QueryError;
 use tree_sitter_highlight::HighlightConfiguration;
 
 use crate::{
-  info_view_content::InfoViewContent,
+  info_view::InfoView,
   notification::{FileProgress, Notification, PublishDiagnostics},
   responses::{GetPlainGoalsResponse, HoverFileResponse},
   types::{Diagnostic, HoverFileResult, PlainGoals, Processing, TextDocument},
 };
 
-#[derive(Default, Getters, MutGetters)]
+#[derive(Clone, Default, Deserialize, Getters, MutGetters, Serialize)]
 #[getset(get = "pub", get_mut = "pub")]
 pub struct FileState {
   diagnostics: Vec<Diagnostic>,
   processing: Vec<Processing>,
 }
 
-#[derive(Getters, MutGetters)]
-pub struct InfoViewContentBuilder {
+#[derive(Clone, Default, Deserialize, Getters, MutGetters, Serialize)]
+pub struct InfoViewData {
   #[get = "pub"]
   file_states: HashMap<TextDocument, FileState>,
 
@@ -30,12 +31,20 @@ pub struct InfoViewContentBuilder {
 
   #[get = "pub"]
   hover_file_result: Option<HoverFileResult>,
+}
+
+#[derive(Constructor, Getters, MutGetters, Serialize)]
+#[constructor(from_values)]
+pub struct InfoViewBuilder {
+  #[get = "pub"]
+  info_view_data: InfoViewData,
 
   #[get_mut = "pub"]
+  #[serde(skip_serializing)]
   syntax_highlighter: SyntaxHighlighter<Style>,
 }
 
-impl InfoViewContentBuilder {
+impl InfoViewBuilder {
   pub const LANGUAGE_NAME_MARKDOWN: &'static str = "markdown";
 
   const DEFAULT_STYLE: Style = Style::new().white();
@@ -46,18 +55,7 @@ impl InfoViewContentBuilder {
   const LOCALS_QUERY_MARKDOWN_INLINE: &'static str = "";
 
   pub fn new() -> Result<Self, QueryError> {
-    let file_states = HashMap::new();
-    let plain_goals = None;
-    let hover_file_result = None;
-    let syntax_highlighter = Self::new_syntax_highlighter()?;
-    let info_view_content_builder = Self {
-      file_states,
-      plain_goals,
-      hover_file_result,
-      syntax_highlighter,
-    };
-
-    info_view_content_builder.ok()
+    Self::from_values(InfoViewData::default(), Self::new_syntax_highlighter()?).ok()
   }
 
   fn new_color_scheme() -> ColorScheme<Style> {
@@ -128,8 +126,8 @@ impl InfoViewContentBuilder {
     syntax_highlighter.ok()
   }
 
-  pub fn build(&mut self) -> InfoViewContent {
-    InfoViewContent::new(self)
+  pub fn build(&mut self) -> InfoView {
+    InfoView::new(self)
   }
 
   fn update_file_states<T>(
@@ -137,8 +135,9 @@ impl InfoViewContentBuilder {
     text_document: TextDocument,
     getter: impl FnOnce(&mut FileState) -> &mut T,
     new_value: T,
-  ) -> InfoViewContent {
+  ) -> InfoView {
     self
+      .info_view_data
       .file_states
       .entry(text_document)
       .or_default()
@@ -149,7 +148,7 @@ impl InfoViewContentBuilder {
     self.build()
   }
 
-  fn on_file_progress(&mut self, file_progress: FileProgress) -> InfoViewContent {
+  fn on_file_progress(&mut self, file_progress: FileProgress) -> InfoView {
     self.update_file_states(
       file_progress.text_document,
       FileState::processing_mut,
@@ -157,7 +156,7 @@ impl InfoViewContentBuilder {
     )
   }
 
-  fn on_publish_diagnostics(&mut self, publish_diagnostics: PublishDiagnostics) -> InfoViewContent {
+  fn on_publish_diagnostics(&mut self, publish_diagnostics: PublishDiagnostics) -> InfoView {
     self.update_file_states(
       publish_diagnostics.text_document,
       FileState::diagnostics_mut,
@@ -165,7 +164,7 @@ impl InfoViewContentBuilder {
     )
   }
 
-  pub fn on_notification(&mut self, notification: Notification) -> Option<InfoViewContent> {
+  pub fn on_notification(&mut self, notification: Notification) -> Option<InfoView> {
     match notification {
       Notification::FileProgress(file_progress) => self.on_file_progress(file_progress).some(),
       Notification::PublishDiagnostics(publish_diagnostics) => self.on_publish_diagnostics(publish_diagnostics).some(),
@@ -173,14 +172,19 @@ impl InfoViewContentBuilder {
     }
   }
 
-  pub fn on_get_plain_goals_response(&mut self, get_plain_goals_response: GetPlainGoalsResponse) -> InfoViewContent {
-    self.plain_goals.mem_replace(get_plain_goals_response.result).mem_drop();
+  pub fn on_get_plain_goals_response(&mut self, get_plain_goals_response: GetPlainGoalsResponse) -> InfoView {
+    self
+      .info_view_data
+      .plain_goals
+      .mem_replace(get_plain_goals_response.result)
+      .mem_drop();
 
     self.build()
   }
 
-  pub fn on_hover_file_response(&mut self, hover_file_response: HoverFileResponse) -> InfoViewContent {
+  pub fn on_hover_file_response(&mut self, hover_file_response: HoverFileResponse) -> InfoView {
     self
+      .info_view_data
       .hover_file_result
       .mem_replace(hover_file_response.result)
       .mem_drop();
@@ -192,6 +196,7 @@ impl InfoViewContentBuilder {
     &mut self,
   ) -> Option<(&HoverFileResult, &mut SyntaxHighlighter<Style>)> {
     self
+      .info_view_data
       .hover_file_result
       .as_ref()?
       .pair(self.syntax_highlighter.ref_mut())

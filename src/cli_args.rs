@@ -16,6 +16,22 @@ use crate::{
   server::Server,
 };
 
+macro_rules! request {
+  ($command:ident $($question_mark:tt)?) => {
+    Self::socket()
+      .await?
+      .request($command)
+      .await? $($question_mark)?
+      .ok::<AnyhowError>()
+  }
+}
+
+macro_rules! print_response_json {
+  ($command:ident $($question_mark:tt)?) => {
+    request!($command $($question_mark)?)?.to_json_str()?.println().ok()
+  }
+}
+
 #[derive(Parser)]
 pub struct CliArgs {
   #[arg(long = "log-level", default_value_t = Tracing::DEFAULT_LEVEL_FILTER, env = Self::LOG_LEVEL_ENV_NAME)]
@@ -61,62 +77,35 @@ impl CliArgs {
   }
 
   async fn file(file_command: FileCommand) -> Result<(), AnyhowError> {
-    let mut socket = Self::socket().await?;
-
     match file_command {
-      FileCommand::Change(change_file_command) => socket.request(change_file_command).await??,
-      FileCommand::Close(close_file_command) => socket.request(close_file_command).await??,
-      FileCommand::Hover(hover_file_command) => socket.request(hover_file_command).await??.to_json_str()?.println(),
-      FileCommand::Open(open_file_command) => socket.request(open_file_command).await??,
+      FileCommand::Change(change_file_command) => request!(change_file_command?),
+      FileCommand::Close(close_file_command) => request!(close_file_command?),
+      FileCommand::Hover(hover_file_command) => print_response_json!(hover_file_command?),
+      FileCommand::Open(open_file_command) => request!(open_file_command?),
     }
-
-    ().ok()
   }
 
   async fn get(get_command: GetCommand) -> Result<(), AnyhowError> {
-    Self::socket()
-      .await?
-      .request(get_command)
-      .await??
-      .to_json_str()?
-      .println()
-      .ok()
+    print_response_json!(get_command?)
   }
 
   async fn info_view(info_view_command: InfoViewCommand) -> Result<(), AnyhowError> {
-    let mut socket = Self::socket().await?;
-
     match info_view_command {
-      InfoViewCommand::GetPlainGoals(get_plain_goals_command) => {
-        socket.request(get_plain_goals_command).await??.to_json_str()?.println();
-      }
+      InfoViewCommand::GetPlainGoals(get_plain_goals_command) => print_response_json!(get_plain_goals_command?),
+      InfoViewCommand::GetData(get_data_command) => print_response_json!(get_data_command),
     }
-
-    ().ok()
   }
 
   async fn kill(kill_command: KillCommand) -> Result<(), AnyhowError> {
-    Self::socket().await?.request(kill_command).await??.ok()
+    request!(kill_command?)
   }
 
   async fn list(list_command: ListCommand) -> Result<(), AnyhowError> {
-    Self::socket()
-      .await?
-      .request(list_command)
-      .await?
-      .to_json_str()?
-      .println()
-      .ok()
+    print_response_json!(list_command)
   }
 
   async fn new_session(new_session_command: NewSessionCommand) -> Result<(), AnyhowError> {
-    Self::socket()
-      .await?
-      .request(new_session_command)
-      .await??
-      .to_json_str()?
-      .println()
-      .ok()
+    print_response_json!(new_session_command?)
   }
 
   async fn notifications(notifications_command: NotificationsCommand) -> Result<(), AnyhowError> {
@@ -132,7 +121,7 @@ impl CliArgs {
   }
 
   async fn rebuild(rebuild_command: RebuildCommand) -> Result<(), AnyhowError> {
-    Self::socket().await?.request(rebuild_command).await??.unit().ok()
+    print_response_json!(rebuild_command?)
   }
 
   async fn tui(tui_command: TuiCommand) -> Output<(), AnyhowError> {

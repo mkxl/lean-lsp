@@ -8,6 +8,7 @@ use camino::Utf8PathBuf;
 use clap::Args;
 use derive_more::{Constructor, Debug as DeriveMoreDebug};
 use enum_assoc::Assoc;
+use getset::CopyGetters;
 use mkutils::{Default as MkutilsDefault, Utils};
 use ratatui::style::Color;
 use serde::{Deserialize, Serialize};
@@ -168,26 +169,28 @@ impl TextDocument {
   }
 }
 
+#[derive(Constructor, CopyGetters)]
+#[getset(get_copy = "pub")]
+pub struct SeverityInfo {
+  label: &'static str,
+  color: Color,
+}
+
 // NOTE: [https://leanprover-community.github.io/mathlib4_docs/Lean/Data/Lsp/Diagnostics.html#Lean.Lsp.DiagnosticSeverity]
 #[derive(Assoc, Clone, Copy, Debug, Deserialize_repr, Serialize_repr)]
 #[repr(u8)]
-#[func(pub const fn label(&self) -> &'static str)]
-#[func(pub const fn color(&self) -> Color)]
+#[func(pub const fn info(&self) -> SeverityInfo)]
 pub enum Severity {
-  #[assoc(label = "error")]
-  #[assoc(color = Color::Red)]
+  #[assoc(info = SeverityInfo::new("error", Color::Red))]
   Error = 1,
 
-  #[assoc(label = "warning")]
-  #[assoc(color = Color::Yellow)]
+  #[assoc(info = SeverityInfo::new("warning", Color::Yellow))]
   Warning = 2,
 
-  #[assoc(label = "info")]
-  #[assoc(color = Color::Blue)]
+  #[assoc(info = SeverityInfo::new("info", Color::Blue))]
   Information = 3,
 
-  #[assoc(label = "hint")]
-  #[assoc(color = Color::DarkGray)]
+  #[assoc(info = SeverityInfo::new("hint", Color::DarkGray))]
   Hint = 4,
 }
 

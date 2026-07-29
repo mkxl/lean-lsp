@@ -4,8 +4,8 @@
 mod cli_args;
 mod commands;
 mod highlight_state;
-mod info_view_content;
-mod info_view_content_builder;
+mod info_view;
+mod info_view_builder;
 mod lean_server_process;
 mod message;
 mod notification;

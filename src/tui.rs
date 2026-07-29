@@ -1,12 +1,12 @@
-use std::{collections::HashMap, io::Error as IoError};
+use std::{collections::HashMap, io::Error as IoError, time::Duration};
 
 use anyhow::Error as AnyhowError;
 use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers, MouseEvent};
-use mkutils::{Output, Point, ScrollCountType, ScrollViewState, Socket, Terminal, Utils};
+use mkutils::{Constructor, Output, Point, ScrollCountType, ScrollViewState, ScrollWhen, Socket, Terminal, Utils};
 use ratatui::{Frame, layout::Rect};
 use ulid::Ulid;
 
-use crate::{commands::TuiCommand, info_view_content::InfoViewContent, session_map::SessionMap};
+use crate::{commands::TuiCommand, info_view::InfoView, session_map::SessionMap};
 
 #[derive(Default)]
 struct AreaSet;
@@ -17,39 +17,56 @@ impl AreaSet {
   }
 }
 
-#[derive(Default)]
-struct InfoViewState;
+#[derive(Constructor)]
+#[constructor(from_values)]
+struct RenderState {
+  scroll_view_state: ScrollViewState,
+}
 
-impl InfoViewState {
-  #[expect(clippy::needless_pass_by_ref_mut)]
+impl RenderState {
+  const DEFAULT_SCROLL_WHEN: ScrollWhen = ScrollWhen::ForLargeContent;
+  const DEFAULT_RENDER_SCROLL_BARS_TIMEOUT: Option<Duration> = Some(Duration::from_secs(1));
+  const DEFAULT_SCROLL_VIEW_STATE: ScrollViewState =
+    ScrollViewState::new(Self::DEFAULT_SCROLL_WHEN, Self::DEFAULT_RENDER_SCROLL_BARS_TIMEOUT);
+
+  const fn new() -> Self {
+    Self::from_values(Self::DEFAULT_SCROLL_VIEW_STATE)
+  }
+
   fn scroll_view_state_mut(&mut self) -> &mut ScrollViewState {
+    self.scroll_view_state.ref_mut()
+  }
+}
+
+impl Default for RenderState {
+  fn default() -> Self {
+    Self::new()
+  }
+}
+
+struct Render;
+
+impl Render {
+  const fn new(_info_view: &InfoView, _info_view_state: &mut RenderState) -> Self {
+    Self
+  }
+
+  const fn render(&self, _frame: &mut Frame) {
     std::todo!()
   }
 }
 
-struct InfoView;
-
-impl InfoView {
-  const fn new(_info_view_content: &InfoViewContent, _info_view_state: &mut InfoViewState) -> Self {
-    Self
-  }
-
-  #[expect(clippy::unused_self)]
-  const fn render(&self, _frame: &mut Frame) {}
-}
-
-#[expect(clippy::zero_sized_map_values)]
 #[derive(Default)]
 struct TuiState {
   latest_area_set: AreaSet,
-  info_view_state_map: HashMap<Ulid, InfoViewState>,
+  render_state_map: HashMap<Ulid, RenderState>,
   active_session_id: Option<Ulid>,
 }
 
 impl TuiState {
-  fn sync(&mut self, session_map: &SessionMap) -> Option<(Ulid, &mut InfoViewState)> {
+  fn sync(&mut self, session_map: &SessionMap) -> Option<(Ulid, &mut RenderState)> {
     self
-      .info_view_state_map
+      .render_state_map
       .retain(|session_id, _info_view_state| session_map.contains(session_id));
 
     let new_active_session_id = if let Some(active_session_id) = self.active_session_id
@@ -59,27 +76,27 @@ impl TuiState {
     } else {
       session_map.random_session_id()?
     };
-    let info_view_state = self.info_view_state_map.entry(new_active_session_id).or_default();
+    let render_state = self.render_state_map.entry(new_active_session_id).or_default();
 
     self.active_session_id = new_active_session_id.some();
 
-    new_active_session_id.pair(info_view_state).some()
+    new_active_session_id.pair(render_state).some()
   }
 
-  fn render_empty(_frame: &mut Frame) {
-    std::todo!()
+  const fn render_empty(_frame: &mut Frame) {
+    // std::todo!()
   }
 
   fn render(&mut self, session_map: &SessionMap, frame: &mut Frame) -> Result<(), AnyhowError> {
     self.latest_area_set = AreaSet::new(frame.area());
 
-    let Some((active_session_id, info_view_state)) = self.sync(session_map) else {
+    let Some((active_session_id, render_state)) = self.sync(session_map) else {
       return Self::render_empty(frame).ok();
     };
-    let info_view_content = session_map.try_get(active_session_id)?.info_view_content();
-    let info_view = InfoView::new(info_view_content, info_view_state);
+    let info_view = session_map.try_get(active_session_id)?.info_view();
+    let render = Render::new(info_view, render_state);
 
-    info_view.render(frame);
+    render.render(frame);
 
     ().ok()
   }
@@ -136,13 +153,13 @@ impl Tui {
   }
 
   fn on_mouse_event(&mut self, mouse_event: MouseEvent, session_map: &SessionMap) {
-    let Some((_active_session_id, info_view_state)) = self.tui_state.sync(session_map) else { return };
+    let Some((_active_session_id, render_state)) = self.tui_state.sync(session_map) else { return };
     let scroll_count_type = mouse_event
       .modifiers
       .pipe_into(Self::get_scoll_count_type)
       .pipe_into(Point::from_scalar);
 
-    info_view_state
+    render_state
       .scroll_view_state_mut()
       .on_scroll(mouse_event.kind, scroll_count_type);
   }

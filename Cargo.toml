@@ -21,7 +21,7 @@ either = "1.16.0"
 enum-assoc = "1.2.4"
 futures = "0.3.31"
 getset = "0.1.6"
-mkutils = { version = "0.1.184", features = ["async", "serde", "tracing", "tui", "unstable"] }
+mkutils = { version = "0.1.191", features = ["async", "serde", "tracing", "tui", "unstable"] }
 ratatui = { version = "0.30.0", features = ["crossterm", "unstable-backend-writer"] }
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.145"
