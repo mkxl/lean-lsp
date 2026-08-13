@@ -51,8 +51,9 @@ impl Render {
     Self
   }
 
+  #[expect(clippy::unused_self)]
   const fn render(&self, _frame: &mut Frame) {
-    std::todo!()
+    // std::todo!()
   }
 }
 

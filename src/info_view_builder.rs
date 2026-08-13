@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use getset::{Getters, MutGetters};
-use mkutils::{ColorScheme, Constructor, SyntaxHighlighter, Utils};
+use mkutils::{CaptureName, ColorScheme, Constructor, SyntaxHighlighter, Utils};
 use ratatui::style::Style;
 use serde::{Deserialize, Serialize};
 use tree_sitter::QueryError;
@@ -14,14 +14,14 @@ use crate::{
   types::{Diagnostic, HoverFileResult, PlainGoals, Processing, TextDocument},
 };
 
-#[derive(Clone, Default, Deserialize, Getters, MutGetters, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, Getters, MutGetters, Serialize)]
 #[getset(get = "pub", get_mut = "pub")]
 pub struct FileState {
   diagnostics: Vec<Diagnostic>,
   processing: Vec<Processing>,
 }
 
-#[derive(Clone, Default, Deserialize, Getters, MutGetters, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, Getters, MutGetters, Serialize)]
 pub struct InfoViewData {
   #[get = "pub"]
   file_states: HashMap<TextDocument, FileState>,
@@ -33,14 +33,13 @@ pub struct InfoViewData {
   hover_file_result: Option<HoverFileResult>,
 }
 
-#[derive(Constructor, Getters, MutGetters, Serialize)]
+#[derive(Constructor, Getters, MutGetters)]
 #[constructor(from_values)]
 pub struct InfoViewBuilder {
   #[get = "pub"]
   info_view_data: InfoViewData,
 
   #[get_mut = "pub"]
-  #[serde(skip_serializing)]
   syntax_highlighter: SyntaxHighlighter<Style>,
 }
 
@@ -60,28 +59,28 @@ impl InfoViewBuilder {
 
   fn new_color_scheme() -> ColorScheme<Style> {
     ColorScheme::new(Self::DEFAULT_STYLE)
-      .insert(ColorScheme::<Style>::ATTRIBUTE, Style::new().blue())
-      .insert(ColorScheme::<Style>::CHARACTER, Style::new().yellow())
-      .insert(ColorScheme::<Style>::COMMENT, Style::new().dark_gray().italic())
-      .insert(ColorScheme::<Style>::CONSTANT, Style::new().cyan())
-      .insert(ColorScheme::<Style>::CONSTRUCTOR, Style::new().green())
-      .insert(ColorScheme::<Style>::FUNCTION, Style::new().green())
-      .insert(ColorScheme::<Style>::KEYWORD, Style::new().magenta())
-      .insert(ColorScheme::<Style>::MARKUP_RAW, Style::new().yellow())
-      .insert(ColorScheme::<Style>::NUMBER, Style::new().cyan())
-      .insert(ColorScheme::<Style>::OPERATOR, Style::new().dark_gray())
-      .insert(ColorScheme::<Style>::PROPERTY, Style::new().blue())
-      .insert(ColorScheme::<Style>::PUNCTUATION, Style::new().dark_gray())
-      .insert(ColorScheme::<Style>::STRING, Style::new().yellow())
-      .insert(ColorScheme::<Style>::STRING_ESCAPE, Style::new().magenta())
-      .insert(ColorScheme::<Style>::TEXT_EMPHASIS, Style::new().white().italic())
-      .insert(ColorScheme::<Style>::TEXT_LITERAL, Style::new().yellow())
-      .insert(ColorScheme::<Style>::TEXT_REFERENCE, Style::new().green())
-      .insert(ColorScheme::<Style>::TEXT_STRONG, Style::new().white().bold())
-      .insert(ColorScheme::<Style>::TEXT_TITLE, Style::new().cyan().bold())
-      .insert(ColorScheme::<Style>::TEXT_URI, Style::new().blue().underlined())
-      .insert(ColorScheme::<Style>::TYPE, Style::new().cyan().bold())
-      .insert(ColorScheme::<Style>::WARNING, Style::new().yellow().bold())
+      .insert(CaptureName::ATTRIBUTE, Style::new().blue())
+      .insert(CaptureName::CHARACTER, Style::new().yellow())
+      .insert(CaptureName::COMMENT, Style::new().dark_gray().italic())
+      .insert(CaptureName::CONSTANT, Style::new().cyan())
+      .insert(CaptureName::CONSTRUCTOR, Style::new().green())
+      .insert(CaptureName::FUNCTION, Style::new().green())
+      .insert(CaptureName::KEYWORD, Style::new().magenta())
+      .insert(CaptureName::MARKUP_RAW, Style::new().yellow())
+      .insert(CaptureName::NUMBER, Style::new().cyan())
+      .insert(CaptureName::OPERATOR, Style::new().dark_gray())
+      .insert(CaptureName::PROPERTY, Style::new().blue())
+      .insert(CaptureName::PUNCTUATION, Style::new().dark_gray())
+      .insert(CaptureName::STRING, Style::new().yellow())
+      .insert(CaptureName::STRING_ESCAPE, Style::new().magenta())
+      .insert(CaptureName::TEXT_EMPHASIS, Style::new().white().italic())
+      .insert(CaptureName::TEXT_LITERAL, Style::new().yellow())
+      .insert(CaptureName::TEXT_REFERENCE, Style::new().green())
+      .insert(CaptureName::TEXT_STRONG, Style::new().white().bold())
+      .insert(CaptureName::TEXT_TITLE, Style::new().cyan().bold())
+      .insert(CaptureName::TEXT_URI, Style::new().blue().underlined())
+      .insert(CaptureName::TYPE, Style::new().cyan().bold())
+      .insert(CaptureName::WARNING, Style::new().yellow().bold())
   }
 
   fn markdown_highlight_configuration() -> Result<HighlightConfiguration, QueryError> {
@@ -115,15 +114,12 @@ impl InfoViewBuilder {
   }
 
   fn new_syntax_highlighter() -> Result<SyntaxHighlighter<Style>, QueryError> {
-    let mut syntax_highlighter = SyntaxHighlighter::new(Self::new_color_scheme());
-
-    syntax_highlighter
-      .add_language(Self::markdown_highlight_configuration()?)
-      .add_language(Self::markdown_inline_highlight_configuration()?)
-      .add_language(Self::lean_highlight_configuration()?)
-      .add_language_alias(Self::LANGUAGE_NAME_LEAN_4, Self::LANGUAGE_NAME_LEAN);
-
-    syntax_highlighter.ok()
+    SyntaxHighlighter::new(Self::new_color_scheme())
+      .with_language(Self::markdown_highlight_configuration()?)
+      .with_language(Self::markdown_inline_highlight_configuration()?)
+      .with_language(Self::lean_highlight_configuration()?)
+      .with_language_alias(Self::LANGUAGE_NAME_LEAN_4, Self::LANGUAGE_NAME_LEAN)
+      .ok()
   }
 
   pub fn build(&mut self) -> InfoView {
