@@ -22,13 +22,13 @@ pub struct PlainGoals {
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize)]
-pub struct Utf8;
+pub enum Utf8 {}
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize)]
-pub struct Utf16;
+pub enum Utf16 {}
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize)]
-pub struct Bytes;
+pub enum Bytes {}
 
 #[derive(Args, Clone, Copy, MkutilsDefault, DeriveMoreDebug, Deserialize, Serialize)]
 pub struct Position<T> {
